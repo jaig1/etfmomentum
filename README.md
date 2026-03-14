@@ -4,17 +4,21 @@ A Python-based system for **backtesting** and **generating live signals** using 
 
 ## Overview
 
-This framework implements a quantitative momentum strategy that:
+This framework implements a **quantitative momentum strategy** with advanced optimization and regime-switching capabilities:
 - Ranks ETFs by relative strength vs SPY
 - Applies dual momentum filters (relative + absolute trend)
 - Selects top performers for portfolio construction
+- **Parameter-optimized** through grid search (48 combinations tested)
+- **Volatility regime switching** for adaptive allocation
+- **Weekly rebalancing** with conditional trading
 - Supports both historical backtesting and live signal generation
 - Works with 3 different ETF universes (48 total ETFs)
 
-**Strategy Performance (10-year backtest 2016-2026):**
-- S&P 500 Sectors: +274% total return (+33% vs SPY)
-- Emerging Markets: +156% total return (-85% vs SPY)
-- Developed Markets: +107% total return (-134% vs SPY)
+**Optimized Strategy Performance (10-year backtest 2016-2026):**
+- **S&P 500 Sectors (Optimized + Weekly):** +378% total return (+137% vs SPY), Sharpe 0.700
+- **S&P 500 Sectors (Optimized Monthly):** +341% total return (+100% vs SPY), Sharpe 0.656
+- **Baseline (Before Optimization):** +270% total return (+29% vs SPY), Sharpe 0.574
+- SPY Benchmark: +241% total return, Sharpe 0.951
 
 ---
 
@@ -106,7 +110,7 @@ uv run python -m etfmomentum backtest --universe sp500 --refresh
 - `--refresh` - Force fetch fresh data from FMP API (bypasses cache)
 
 **Backtest-specific:**
-- `--top-n N` - Number of ETFs to hold (default: 5)
+- `--top-n N` - Number of ETFs to hold (default: 3, optimized)
 - `--initial-capital AMOUNT` - Starting capital (default: 100000)
 
 ---
@@ -139,23 +143,81 @@ The framework supports three distinct ETF universes defined in CSV files under `
 
 ## Strategy Logic
 
-### Core Methodology
+### Core Methodology (Optimized)
 
 1. **Relative Strength (RS) Ratio**: ETF price / SPY price
 2. **RS Filter**: RS ratio must be > its 10-month SMA (relative trend)
 3. **Absolute Filter**: ETF price must be > its 10-month SMA (absolute trend)
-4. **Momentum Ranking**: Calculate 1-month RS Rate of Change (ROC)
-5. **Portfolio Selection**: Choose top 5 ETFs by RS momentum
-6. **Equal Weighting**: 20% allocation to each selected ETF
-7. **SPY Fallback**: If <5 ETFs qualify, allocate remainder to SPY
-8. **Rebalancing**: Monthly on first trading day
+4. **Momentum Ranking**: Calculate **3-month** RS Rate of Change (ROC) — optimized from 1-month
+5. **Portfolio Selection**: Choose top **3 ETFs** by RS momentum — optimized from 5
+6. **Equal Weighting**: 33% allocation to each selected ETF
+7. **SPY Fallback**: If <3 ETFs qualify, allocate remainder to SPY
+8. **Rebalancing**: **Weekly monitoring** with conditional trading (only trade when signals change)
+9. **Volatility Regime Switching**: Adaptive position sizing based on market volatility (low/medium/high)
 
 ### Why This Works
 
 - **Dual filters prevent false signals**: Both relative and absolute trends must align
 - **RS vs SPY captures relative momentum**: Identifies outperformers vs market
-- **Monthly rebalancing**: Balances signal quality vs transaction costs
-- **Top 5 selection**: Concentrates in strongest momentum while maintaining diversification
+- **3-month ROC reduces noise**: More stable than 1-month, captures sustainable trends
+- **Top 3 concentration**: Holding only the strongest performers beats diversification (avg Sharpe 0.591 vs 0.573 for 5 holdings)
+- **Weekly monitoring**: Better performance than monthly (378% vs 341%) with only ~60-70% weeks requiring trades
+- **Volatility regime adaptation**: Adjusts holdings and SPY allocation based on market conditions
+
+---
+
+## Optimization & Research Findings
+
+### Parameter Optimization Results
+
+A comprehensive grid search tested **48 parameter combinations** across:
+- SMA Windows: 6, 8, 10, 12 months
+- ROC Lookbacks: 1, 3, 6 months
+- Top N Holdings: 3, 5, 7, 10
+
+**Key Findings:**
+
+1. **Top 3 Holdings Beat More Diversification**
+   - Average Sharpe: 3 holdings (0.591) vs 5 holdings (0.573) vs 10 holdings (0.558)
+   - Top 5 ranked combinations ALL use 3 holdings
+   - Holding 4th and 5th ranked ETFs dilutes alpha from top performers
+
+2. **3-Month ROC Beats 1-Month**
+   - 3-month lookback captures sustainable trends without noise
+   - Changing from 1mo → 3mo increased returns by ~25%
+   - 6-month lookback too slow to adapt to regime changes
+
+3. **Weekly Rebalancing Outperforms Monthly**
+   - Weekly monitoring with conditional trading: 378% return, 0.700 Sharpe
+   - Monthly rebalancing: 341% return, 0.656 Sharpe
+   - Only ~60-70% of weeks require actual trades (rest stay unchanged)
+
+**Optimization Impact:**
+- **Before:** 270% return, Sharpe 0.574, +29% vs SPY (Rank: 24/48)
+- **After:** 341% return, Sharpe 0.656, +100% vs SPY (Rank: 1/48)
+- **Improvement:** +70.56 percentage points, +14.2% Sharpe
+
+See `output/sp500/optimization_results.csv` for full results.
+
+### Volatility Regime Switching
+
+The strategy adapts to market volatility conditions:
+
+**SPY-Based Detection (default):**
+- Low Vol (<10%): 3 holdings, aggressive (no SPY minimum)
+- Medium Vol (10-25%): 3 holdings, normal allocation
+- High Vol (>25%): 5 holdings, minimum 20% SPY allocation
+
+**Alternative: VIX-Based Detection**
+- Uses ^VIX ticker with smoothing and hysteresis
+- Configurable thresholds for regime transitions
+
+**Defensive Modes** (high volatility):
+- `baseline`: Increase SPY allocation
+- `defensive_sectors`: Force allocation to XLP, XLU, XLV
+- `tbills`: 100% T-Bills (BIL)
+- `hybrid`: 50% T-Bills + 50% defensive sectors
+- `tiered`: Defensive sectors in high vol, T-Bills in extreme vol (>35%)
 
 ---
 
@@ -202,14 +264,27 @@ BACKTEST_START_DATE = "2016-01-01"
 BACKTEST_END_DATE = "2026-03-01"
 DATA_START_DATE = "2015-01-01"  # Must be 10+ months before backtest start
 
-# Strategy parameters
-SMA_WINDOW = 10  # 10-month SMA for both filters
-RS_ROC_LOOKBACK = 1  # 1-month momentum lookback
-TOP_N_HOLDINGS = 5  # Number of ETFs to hold
+# Optimized Strategy Parameters (from grid search)
+SMA_LOOKBACK_DAYS = 210  # 10-month SMA (optimized)
+RS_ROC_LOOKBACK_DAYS = 63  # 3-month momentum lookback (optimized from 21 days)
+TOP_N_HOLDINGS = 3  # Number of ETFs to hold (optimized from 5)
+REBALANCE_FREQUENCY = "weekly"  # "weekly" or "monthly" (weekly performs better)
 INITIAL_CAPITAL = 100000  # Starting capital for backtest
 
+# Volatility Regime Switching
+ENABLE_VOLATILITY_REGIME_SWITCHING = True  # Toggle regime switching on/off
+USE_VIX_FOR_REGIME = False  # Use VIX ticker (True) or calculate from SPY (False)
+VOLATILITY_LOOKBACK_DAYS = 30  # Window for SPY volatility calculation
+LOW_VOL_THRESHOLD = 0.10  # 10% annualized
+HIGH_VOL_THRESHOLD = 0.25  # 25% annualized
+
+# Regime-Specific Parameters
+LOW_VOL_TOP_N = 3  # Holdings in low volatility (aggressive)
+MEDIUM_VOL_TOP_N = 3  # Holdings in medium volatility (normal)
+HIGH_VOL_TOP_N = 5  # Holdings in high volatility (defensive)
+HIGH_VOL_SPY_MIN_ALLOCATION = 0.20  # Minimum 20% SPY in high vol
+
 # API settings
-FMP_BASE_URL = "https://financialmodelingprep.com/api"
 FMP_API_DELAY = 0  # No delay needed with premium plan (3000 calls/min)
 
 # Paths
@@ -233,31 +308,44 @@ For signal generation, **no changes needed** - always uses latest data.
 
 ```
 etfmomentum/
-├── etfmomentum/               # Main package
+├── etfmomentum/                      # Main package
 │   ├── __init__.py
-│   ├── __main__.py           # CLI entry point
-│   ├── main.py               # Orchestration logic (backtest/signal modes)
-│   ├── config.py             # Configuration and parameters
-│   ├── data_fetcher.py       # FMP API integration (stable endpoints)
-│   ├── etf_loader.py         # Load ETF universes from CSV files
-│   ├── rs_engine.py          # Signal generation (RS, SMA, filters, ROC)
-│   ├── backtest.py           # Portfolio simulation engine
-│   ├── report.py             # Backtest performance metrics
-│   ├── signal_generator.py   # Live signal generation
-│   └── signal_report.py      # Signal formatting and output
-├── etflist/                  # ETF universe definitions (CSV)
+│   ├── __main__.py                  # CLI entry point
+│   ├── main.py                      # Orchestration (backtest/signal modes)
+│   ├── config.py                    # Configuration and optimized parameters
+│   ├── data_fetcher.py              # FMP API integration (stable endpoints)
+│   ├── etf_loader.py                # Load ETF universes from CSV
+│   ├── rs_engine.py                 # Signal generation (RS, SMA, filters, ROC)
+│   ├── backtest.py                  # Portfolio simulation engine
+│   ├── report.py                    # Performance metrics and reporting
+│   ├── signal_generator.py          # Live signal generation
+│   ├── signal_report.py             # Signal formatting and output
+│   │
+│   ├── optimizer.py                 # Grid search parameter optimization
+│   ├── volatility_regime.py         # Volatility regime detection and switching
+│   ├── trading_frequency_analyzer.py # Weekly vs monthly rebalancing analysis
+│   ├── defensive_strategy_tester.py  # Defensive allocation testing
+│   ├── timing_strategy_tester.py     # Market timing analysis
+│   └── volatility_timing_analyzer.py # Volatility signal lag analysis
+│
+├── etflist/                         # ETF universe definitions (CSV)
 │   ├── sp500_sector_etfs.csv
 │   ├── developed_market_etfs.csv
 │   └── emerging_market_etfs.csv
-├── data/                     # Cached price data (gitignored)
+├── data/                            # Cached price data (gitignored)
 │   └── price_data.csv
-├── output/                   # Results by universe (gitignored)
+├── output/                          # Results by universe (gitignored)
 │   ├── sp500/
+│   │   ├── optimization_results.csv
+│   │   ├── optimization_summary.txt
+│   │   ├── weekly_trading_frequency.csv
+│   │   └── ... (backtest/signal results)
 │   ├── developed/
 │   └── emerging/
-├── .env                      # FMP API key (gitignored)
-├── pyproject.toml           # UV dependencies
-└── README.md                # This file
+├── .env                             # FMP API key (gitignored)
+├── pyproject.toml                   # UV dependencies
+├── README.md                        # This file
+└── TASK_ETF_RS_BACKTEST.md         # Technical specification
 ```
 
 ---
@@ -352,9 +440,18 @@ uv run python -m etfmomentum backtest --universe emerging --refresh
 cat output/*/performance_summary.csv
 ```
 
-### Research and Testing
+### Research and Optimization
 
 ```bash
+# Run parameter optimization (grid search across 48 combinations)
+uv run python -m etfmomentum.optimizer
+
+# Analyze trading frequency (weekly vs monthly)
+uv run python -m etfmomentum.trading_frequency_analyzer
+
+# Test defensive strategies in high volatility
+uv run python -m etfmomentum.defensive_strategy_tester
+
 # Compare different top-N values
 uv run python -m etfmomentum backtest --universe sp500 --top-n 3
 uv run python -m etfmomentum backtest --universe sp500 --top-n 7
