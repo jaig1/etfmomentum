@@ -2,7 +2,7 @@
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 import logging
 
@@ -98,6 +98,7 @@ def run_backtest(
     end_date: str,
     initial_capital: float,
     top_n: int,
+    regime_detector: Optional[any] = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, List[Dict]]:
     """
     Run the full backtest simulation with monthly rebalancing.
@@ -109,7 +110,8 @@ def run_backtest(
         start_date: Backtest start date (YYYY-MM-DD)
         end_date: Backtest end date (YYYY-MM-DD)
         initial_capital: Starting capital
-        top_n: Number of ETFs to hold
+        top_n: Number of ETFs to hold (default, overridden by regime if detector provided)
+        regime_detector: Optional VolatilityRegime instance for regime-based adjustments
 
     Returns:
         Tuple of:
@@ -145,11 +147,31 @@ def run_backtest(
     for i, date in enumerate(trading_dates):
         # Check if it's a rebalance date
         if date >= next_rebalance_date:
+            # Determine parameters based on regime (if enabled)
+            active_top_n = top_n
+            regime_info = None
+
+            if regime_detector is not None:
+                # Detect volatility regime
+                spy_prices = price_data[spy_ticker]
+                regime = regime_detector.detect_regime(spy_prices, date)
+                regime_params = regime_detector.get_regime_parameters(regime)
+                active_top_n = regime_params['top_n']
+                regime_info = regime_params['regime']
+
+                logger.info(f"{date.date()}: Regime={regime_info}, Top N={active_top_n}")
+
             # Get qualifying ETFs
             qualifying = get_qualifying_etfs(signals, date)
 
-            # Select portfolio
-            new_holdings = select_portfolio(qualifying, top_n, spy_ticker)
+            # Select portfolio with regime-adjusted top_n
+            new_holdings = select_portfolio(qualifying, active_top_n, spy_ticker)
+
+            # Adjust portfolio for regime constraints (e.g., min SPY allocation)
+            if regime_detector is not None:
+                new_holdings = regime_detector.adjust_portfolio_for_regime(
+                    new_holdings, regime_params, spy_ticker
+                )
 
             # Log rebalance
             rebalance_info = {
@@ -158,6 +180,8 @@ def run_backtest(
                 'selected': list(new_holdings.keys()),
                 'weights': new_holdings.copy(),
                 'qualifying_etfs': qualifying.to_dict('records') if not qualifying.empty else [],
+                'regime': regime_info,
+                'top_n_used': active_top_n,
             }
             rebalance_log.append(rebalance_info)
 

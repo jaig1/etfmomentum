@@ -35,6 +35,18 @@ SMA_LOOKBACK_DAYS = 210  # 10 months (optimized: was 200)
 RS_ROC_LOOKBACK_DAYS = 63  # 3 months (optimized: was 21 for 1 month)
 RISK_FREE_RATE = 0.045  # 4.5% annual risk-free rate for Sharpe calculation
 
+# Volatility Regime Switching
+ENABLE_VOLATILITY_REGIME_SWITCHING = True  # Toggle feature on/off
+VOLATILITY_LOOKBACK_DAYS = 30  # Window for calculating SPY volatility
+LOW_VOL_THRESHOLD = 0.10  # Annualized volatility threshold (10%)
+HIGH_VOL_THRESHOLD = 0.25  # Annualized volatility threshold (25%)
+
+# Regime-Specific Parameters
+LOW_VOL_TOP_N = 3  # Holdings in low volatility regime (aggressive)
+MEDIUM_VOL_TOP_N = 3  # Holdings in medium volatility regime (normal)
+HIGH_VOL_TOP_N = 5  # Holdings in high volatility regime (defensive)
+HIGH_VOL_SPY_MIN_ALLOCATION = 0.20  # Minimum SPY allocation in high vol (20%)
+
 # API Settings
 FMP_API_DELAY = 0  # No delay needed (3000 calls/min plan)
 

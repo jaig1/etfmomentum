@@ -10,6 +10,7 @@ from .data_fetcher import get_price_data
 from .rs_engine import generate_signals
 from .backtest import run_backtest, get_rebalance_dates
 from .etf_loader import load_universe_by_name
+from .volatility_regime import create_regime_detector
 from .report import (
     calculate_metrics,
     generate_performance_summary,
@@ -104,6 +105,7 @@ def run_backtest_mode(args):
     logger.info(f"Top N Holdings: {args.top_n}")
     logger.info(f"Number of ETFs: {len(etf_universe)}")
     logger.info(f"Benchmark: {config.BENCHMARK_TICKER}")
+    logger.info(f"Volatility Regime Switching: {'ENABLED' if config.ENABLE_VOLATILITY_REGIME_SWITCHING else 'DISABLED'}")
     logger.info("="*70)
 
     try:
@@ -135,6 +137,18 @@ def run_backtest_mode(args):
             roc_lookback=config.RS_ROC_LOOKBACK_DAYS,
         )
 
+        # Create regime detector if enabled
+        regime_detector = None
+        if config.ENABLE_VOLATILITY_REGIME_SWITCHING:
+            logger.info("\nVolatility Regime Switching is ENABLED")
+            logger.info(f"  Low Vol Threshold: {config.LOW_VOL_THRESHOLD:.1%}")
+            logger.info(f"  High Vol Threshold: {config.HIGH_VOL_THRESHOLD:.1%}")
+            logger.info(f"  Low Vol Top N: {config.LOW_VOL_TOP_N}")
+            logger.info(f"  Medium Vol Top N: {config.MEDIUM_VOL_TOP_N}")
+            logger.info(f"  High Vol Top N: {config.HIGH_VOL_TOP_N}")
+            logger.info(f"  High Vol Min SPY: {config.HIGH_VOL_SPY_MIN_ALLOCATION:.0%}")
+            regime_detector = create_regime_detector(config)
+
         # Run backtest
         logger.info("\n[3/5] Running backtest...")
         strategy_values, benchmark_values, rebalance_log = run_backtest(
@@ -145,6 +159,7 @@ def run_backtest_mode(args):
             end_date=args.end_date,
             initial_capital=args.initial_capital,
             top_n=args.top_n,
+            regime_detector=regime_detector,
         )
 
         # Calculate metrics
