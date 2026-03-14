@@ -1,0 +1,401 @@
+# ETF Momentum - Relative Strength Framework
+
+A Python-based system for **backtesting** and **generating live signals** using a Relative Strength (RS) momentum rotation strategy across multiple ETF universes.
+
+## Overview
+
+This framework implements a quantitative momentum strategy that:
+- Ranks ETFs by relative strength vs SPY
+- Applies dual momentum filters (relative + absolute trend)
+- Selects top performers for portfolio construction
+- Supports both historical backtesting and live signal generation
+- Works with 3 different ETF universes (48 total ETFs)
+
+**Strategy Performance (10-year backtest 2016-2026):**
+- S&P 500 Sectors: +274% total return (+33% vs SPY)
+- Emerging Markets: +156% total return (-85% vs SPY)
+- Developed Markets: +107% total return (-134% vs SPY)
+
+---
+
+## Quick Start for Future Sessions
+
+When starting a new session with Claude:
+
+1. **Tell Claude**: "This is the ETF momentum project at `/Users/jaig/etfmomentum`. Read the README."
+2. **Ask for what you need**:
+   - "Run signals for S&P 500 sectors"
+   - "Run backtest for emerging markets"
+   - "Generate signals for all three universes"
+
+Claude will read this file and understand the project structure and commands.
+
+---
+
+## Installation
+
+This project uses [uv](https://github.com/astral-sh/uv) for package management.
+
+```bash
+# Install dependencies
+uv sync
+```
+
+### API Key Setup
+
+1. Create a `.env` file in the project root:
+```bash
+cp .env.example .env
+```
+
+2. Add your Financial Modeling Prep API key:
+```
+FMP_API_KEY=your_api_key_here
+```
+
+Get your API key at: https://financialmodelingprep.com/developer/docs/
+
+**Note**: This project uses FMP **stable** endpoints (not v3) and works with premium plans (3000 calls/min, 30 years of data).
+
+---
+
+## Usage
+
+The framework has two primary modes: **backtest** (historical simulation) and **signal** (live recommendations).
+
+### Signal Generation (Most Common Use Case)
+
+Generate current month portfolio recommendations:
+
+```bash
+# S&P 500 Sector ETFs (recommended - best performer)
+uv run python -m etfmomentum signal --universe sp500 --refresh
+
+# Developed Market ETFs
+uv run python -m etfmomentum signal --universe developed --refresh
+
+# Emerging Market ETFs
+uv run python -m etfmomentum signal --universe emerging --refresh
+
+# Add --detailed flag for comprehensive ETF status report
+uv run python -m etfmomentum signal --universe sp500 --detailed --refresh
+```
+
+**Always use `--refresh`** when generating signals to fetch the latest data.
+
+### Backtesting
+
+Run historical performance simulation:
+
+```bash
+# 10-year backtest (2016-2026) for S&P 500 sectors
+uv run python -m etfmomentum backtest --universe sp500
+
+# Backtest other universes
+uv run python -m etfmomentum backtest --universe developed
+uv run python -m etfmomentum backtest --universe emerging
+
+# Force refresh data from API
+uv run python -m etfmomentum backtest --universe sp500 --refresh
+```
+
+### Command Options
+
+**Common flags (both modes):**
+- `--universe {sp500|developed|emerging}` - **Required**: Select ETF universe
+- `--refresh` - Force fetch fresh data from FMP API (bypasses cache)
+
+**Backtest-specific:**
+- `--top-n N` - Number of ETFs to hold (default: 5)
+- `--initial-capital AMOUNT` - Starting capital (default: 100000)
+
+---
+
+## ETF Universes
+
+The framework supports three distinct ETF universes defined in CSV files under `etflist/`:
+
+### 1. S&P 500 Sector ETFs (`sp500_sector_etfs.csv`)
+**11 SPDR sector ETFs** - Best historical performance
+- XLK (Technology), XLF (Financials), XLE (Energy)
+- XLV (Health Care), XLY (Consumer Discretionary), XLP (Consumer Staples)
+- XLI (Industrials), XLB (Materials), XLRE (Real Estate)
+- XLU (Utilities), XLC (Communication Services)
+
+### 2. Developed Market ETFs (`developed_market_etfs.csv`)
+**26 iShares country ETFs** covering major developed economies
+- Countries: Japan, Germany, UK, Australia, Canada, France, Switzerland, Spain, Italy, Netherlands, Sweden, Belgium, Singapore, Hong Kong, Norway, Denmark, Finland, Ireland, Israel
+- Includes small-cap and currency-hedged variants
+
+### 3. Emerging Market ETFs (`emerging_market_etfs.csv`)
+**28 country/regional ETFs** across Asia, LatAm, and EMEA
+- Asia: China, India, Taiwan, South Korea, Malaysia, Indonesia, Thailand, Philippines, Vietnam
+- LatAm: Brazil, Mexico, Chile, Peru, Argentina, Colombia
+- EMEA: Turkey, Poland, Saudi Arabia, UAE, Qatar, South Africa, Egypt, Nigeria, Greece
+
+**Benchmark for all universes:** SPY (S&P 500)
+
+---
+
+## Strategy Logic
+
+### Core Methodology
+
+1. **Relative Strength (RS) Ratio**: ETF price / SPY price
+2. **RS Filter**: RS ratio must be > its 10-month SMA (relative trend)
+3. **Absolute Filter**: ETF price must be > its 10-month SMA (absolute trend)
+4. **Momentum Ranking**: Calculate 1-month RS Rate of Change (ROC)
+5. **Portfolio Selection**: Choose top 5 ETFs by RS momentum
+6. **Equal Weighting**: 20% allocation to each selected ETF
+7. **SPY Fallback**: If <5 ETFs qualify, allocate remainder to SPY
+8. **Rebalancing**: Monthly on first trading day
+
+### Why This Works
+
+- **Dual filters prevent false signals**: Both relative and absolute trends must align
+- **RS vs SPY captures relative momentum**: Identifies outperformers vs market
+- **Monthly rebalancing**: Balances signal quality vs transaction costs
+- **Top 5 selection**: Concentrates in strongest momentum while maintaining diversification
+
+---
+
+## Output Files
+
+Results are saved in universe-specific directories:
+
+```
+output/
+├── sp500/
+│   ├── backtest_results.csv          # Equity curve data
+│   ├── performance_summary.csv       # Key metrics vs SPY
+│   ├── yearly_summary.csv            # Year-by-year performance
+│   ├── monthly_holdings.csv          # Holdings each month
+│   ├── current_signals.csv           # Latest month portfolio (signal mode)
+│   └── all_etf_status.csv           # Complete ETF status (signal mode)
+├── developed/
+│   └── (same structure)
+└── emerging/
+    └── (same structure)
+```
+
+### Report Contents
+
+**Backtest Reports:**
+- `performance_summary.csv`: Total return, annualized return, Sharpe ratio, max drawdown, vs SPY
+- `yearly_summary.csv`: Year-by-year returns for portfolio and SPY
+- `monthly_holdings.csv`: Portfolio composition at each rebalance
+- `backtest_results.csv`: Daily portfolio values and returns
+
+**Signal Reports:**
+- `current_signals.csv`: Top 5 recommended ETFs for current month
+- `all_etf_status.csv`: Complete status of all ETFs (prices, SMAs, filters, rankings)
+
+---
+
+## Configuration
+
+Edit `etfmomentum/config.py` to adjust:
+
+```python
+# Backtest period (10 years)
+BACKTEST_START_DATE = "2016-01-01"
+BACKTEST_END_DATE = "2026-03-01"
+DATA_START_DATE = "2015-01-01"  # Must be 10+ months before backtest start
+
+# Strategy parameters
+SMA_WINDOW = 10  # 10-month SMA for both filters
+RS_ROC_LOOKBACK = 1  # 1-month momentum lookback
+TOP_N_HOLDINGS = 5  # Number of ETFs to hold
+INITIAL_CAPITAL = 100000  # Starting capital for backtest
+
+# API settings
+FMP_BASE_URL = "https://financialmodelingprep.com/api"
+FMP_API_DELAY = 0  # No delay needed with premium plan (3000 calls/min)
+
+# Paths
+ETFLIST_DIR = PROJECT_ROOT / "etflist"  # External ETF universe CSVs
+DATA_DIR = PROJECT_ROOT / "data"  # Cached price data
+OUTPUT_DIR = PROJECT_ROOT / "output"  # Results
+```
+
+### Updating for Future Backtests
+
+To extend the backtest period, only update:
+```python
+BACKTEST_END_DATE = "2026-04-01"  # New end date
+```
+
+For signal generation, **no changes needed** - always uses latest data.
+
+---
+
+## Project Structure
+
+```
+etfmomentum/
+├── etfmomentum/               # Main package
+│   ├── __init__.py
+│   ├── __main__.py           # CLI entry point
+│   ├── main.py               # Orchestration logic (backtest/signal modes)
+│   ├── config.py             # Configuration and parameters
+│   ├── data_fetcher.py       # FMP API integration (stable endpoints)
+│   ├── etf_loader.py         # Load ETF universes from CSV files
+│   ├── rs_engine.py          # Signal generation (RS, SMA, filters, ROC)
+│   ├── backtest.py           # Portfolio simulation engine
+│   ├── report.py             # Backtest performance metrics
+│   ├── signal_generator.py   # Live signal generation
+│   └── signal_report.py      # Signal formatting and output
+├── etflist/                  # ETF universe definitions (CSV)
+│   ├── sp500_sector_etfs.csv
+│   ├── developed_market_etfs.csv
+│   └── emerging_market_etfs.csv
+├── data/                     # Cached price data (gitignored)
+│   └── price_data.csv
+├── output/                   # Results by universe (gitignored)
+│   ├── sp500/
+│   ├── developed/
+│   └── emerging/
+├── .env                      # FMP API key (gitignored)
+├── pyproject.toml           # UV dependencies
+└── README.md                # This file
+```
+
+---
+
+## Adding/Modifying ETF Universes
+
+To add or remove ETFs:
+
+1. Edit the relevant CSV file in `etflist/`:
+   - Format: `Ticker,ETF_Name,Issuer`
+   - Example: `"XLK","Technology","SPDR (State Street)"`
+
+2. Run with `--refresh` to fetch data for new ETFs:
+   ```bash
+   uv run python -m etfmomentum backtest --universe sp500 --refresh
+   ```
+
+To create a new universe:
+1. Create new CSV in `etflist/` (e.g., `bond_etfs.csv`)
+2. Update `etf_loader.py` to add the new universe name
+3. Update `main.py` to add it to CLI choices
+
+---
+
+## Technical Details
+
+### API Integration
+
+- **Endpoint**: `https://financialmodelingprep.com/api/stable/historical-price-eod/full`
+- **Response format**: Direct list of price records (not nested dict)
+- **Price field**: Uses `"close"` field (not `"adjClose"`)
+- **Caching**: Saves to `data/price_data.csv` to minimize API calls
+- **Date range**: Automatically calculated based on config dates + 10-month buffer for SMA
+
+### Data Requirements
+
+For signal generation:
+- Minimum 11 months of data (10-month SMA + 1 month for ROC)
+
+For backtesting:
+- Data start must be 10+ months before backtest start
+- Currently: 2015-01-01 to 2026-03-01 (11 years)
+
+### Performance Notes
+
+- Uses pandas for efficient time-series operations
+- Data cached to avoid repeated API calls
+- Premium FMP plan allows rapid data fetching (3000 calls/min)
+
+---
+
+## Requirements
+
+- **Python**: 3.11+
+- **Package Manager**: UV
+- **API**: Financial Modeling Prep (premium plan recommended)
+- **Dependencies**: pandas, numpy, requests, python-dotenv, tabulate
+
+---
+
+## Common Workflows
+
+### Monthly Signal Generation (Recommended)
+
+On the first trading day of each month:
+
+```bash
+# 1. Generate signals with fresh data
+uv run python -m etfmomentum signal --universe sp500 --detailed --refresh
+
+# 2. Review recommendations in terminal output
+
+# 3. Check detailed reports
+cat output/sp500/current_signals.csv
+cat output/sp500/all_etf_status.csv
+```
+
+### Quarterly Backtest Review
+
+Every quarter, run updated backtests:
+
+```bash
+# 1. Update config.py with new end date
+# Edit: BACKTEST_END_DATE = "2026-06-01"
+
+# 2. Run backtests for all universes
+uv run python -m etfmomentum backtest --universe sp500 --refresh
+uv run python -m etfmomentum backtest --universe developed --refresh
+uv run python -m etfmomentum backtest --universe emerging --refresh
+
+# 3. Compare performance metrics
+cat output/*/performance_summary.csv
+```
+
+### Research and Testing
+
+```bash
+# Compare different top-N values
+uv run python -m etfmomentum backtest --universe sp500 --top-n 3
+uv run python -m etfmomentum backtest --universe sp500 --top-n 7
+
+# Test different universes
+uv run python -m etfmomentum signal --universe developed --detailed --refresh
+uv run python -m etfmomentum signal --universe emerging --detailed --refresh
+```
+
+---
+
+## Troubleshooting
+
+### "Ticker XXX not found in price data"
+- Use `--refresh` flag to fetch fresh data
+- Check if ticker exists in FMP database
+- Verify ticker spelling in CSV file
+
+### "Division by zero" or missing data
+- Some ETFs may have limited history (e.g., HEWG, EWGS)
+- These are automatically skipped with warnings
+- Check `all_etf_status.csv` for data availability
+
+### Cached data is stale
+- Delete `data/price_data.csv` manually, or
+- Always use `--refresh` flag for signal generation
+
+### Wrong universe data
+- Data cache is shared across universes
+- Use `--refresh` when switching between universes
+- Or delete `data/price_data.csv` before running
+
+---
+
+## License
+
+MIT
+
+---
+
+## Contact
+
+For questions about this framework, refer to the conversation logs or Claude memory files at:
+`~/.claude/projects/-Users-jaig-etfmomentum/`
