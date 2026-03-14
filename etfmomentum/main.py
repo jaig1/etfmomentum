@@ -113,6 +113,11 @@ def run_backtest_mode(args):
         logger.info("\n[1/5] Fetching price data...")
         all_tickers = list(etf_universe.keys()) + [config.BENCHMARK_TICKER]
 
+        # Add VIX if regime switching with VIX is enabled
+        if config.ENABLE_VOLATILITY_REGIME_SWITCHING and config.USE_VIX_FOR_REGIME:
+            all_tickers.append(config.VIX_TICKER)
+            logger.info(f"Volatility regime switching with VIX enabled - fetching {config.VIX_TICKER}")
+
         price_data = get_price_data(
             ticker_list=all_tickers,
             start_date=config.DATA_START_DATE,
@@ -141,8 +146,16 @@ def run_backtest_mode(args):
         regime_detector = None
         if config.ENABLE_VOLATILITY_REGIME_SWITCHING:
             logger.info("\nVolatility Regime Switching is ENABLED")
-            logger.info(f"  Low Vol Threshold: {config.LOW_VOL_THRESHOLD:.1%}")
-            logger.info(f"  High Vol Threshold: {config.HIGH_VOL_THRESHOLD:.1%}")
+            if config.USE_VIX_FOR_REGIME:
+                logger.info(f"  Method: VIX-based (ticker: {config.VIX_TICKER})")
+                logger.info(f"  VIX Smoothing: {config.VIX_SMOOTHING_DAYS} days")
+                logger.info(f"  VIX Low Threshold: {config.VIX_LOW_THRESHOLD:.0f}")
+                logger.info(f"  VIX High Enter: {config.VIX_HIGH_ENTER_THRESHOLD:.0f}")
+                logger.info(f"  VIX High Exit: {config.VIX_HIGH_EXIT_THRESHOLD:.0f} (hysteresis)")
+            else:
+                logger.info(f"  Method: SPY volatility calculation")
+                logger.info(f"  Low Vol Threshold: {config.LOW_VOL_THRESHOLD:.1%}")
+                logger.info(f"  High Vol Threshold: {config.HIGH_VOL_THRESHOLD:.1%}")
             logger.info(f"  Low Vol Top N: {config.LOW_VOL_TOP_N}")
             logger.info(f"  Medium Vol Top N: {config.MEDIUM_VOL_TOP_N}")
             logger.info(f"  High Vol Top N: {config.HIGH_VOL_TOP_N}")
@@ -151,6 +164,7 @@ def run_backtest_mode(args):
 
         # Run backtest
         logger.info("\n[3/5] Running backtest...")
+        logger.info(f"Rebalance Frequency: {config.REBALANCE_FREQUENCY}")
         strategy_values, benchmark_values, rebalance_log = run_backtest(
             signals=signals,
             price_data=price_data,
@@ -160,6 +174,7 @@ def run_backtest_mode(args):
             initial_capital=args.initial_capital,
             top_n=args.top_n,
             regime_detector=regime_detector,
+            rebalance_frequency=config.REBALANCE_FREQUENCY,
         )
 
         # Calculate metrics

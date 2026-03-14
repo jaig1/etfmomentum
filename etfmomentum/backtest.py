@@ -15,17 +15,19 @@ def get_rebalance_dates(
     price_data: pd.DataFrame,
     start_date: str,
     end_date: str,
+    frequency: str = "monthly",
 ) -> List[pd.Timestamp]:
     """
-    Identify the first trading day of each month within the backtest period.
+    Identify rebalance dates within the backtest period.
 
     Args:
         price_data: DataFrame with dates as index
         start_date: Backtest start date (YYYY-MM-DD)
         end_date: Backtest end date (YYYY-MM-DD)
+        frequency: "weekly" or "monthly" (default: "monthly")
 
     Returns:
-        List of rebalance dates (first trading day of each month)
+        List of rebalance dates
     """
     # Filter to backtest period
     mask = (price_data.index >= start_date) & (price_data.index <= end_date)
@@ -34,18 +36,124 @@ def get_rebalance_dates(
     if len(backtest_dates) == 0:
         raise ValueError(f"No trading dates found between {start_date} and {end_date}")
 
-    # Group by year-month and get first date in each group
     rebalance_dates = []
-    current_month = None
 
-    for date in backtest_dates:
-        year_month = (date.year, date.month)
-        if year_month != current_month:
-            rebalance_dates.append(date)
-            current_month = year_month
+    if frequency == "weekly":
+        # First trading day of each week
+        current_week = None
+        for date in backtest_dates:
+            week_key = (date.year, date.isocalendar()[1])  # (year, week_number)
+            if week_key != current_week:
+                rebalance_dates.append(date)
+                current_week = week_key
 
-    logger.info(f"Found {len(rebalance_dates)} rebalance dates")
+    elif frequency == "monthly":
+        # First trading day of each month
+        current_month = None
+        for date in backtest_dates:
+            year_month = (date.year, date.month)
+            if year_month != current_month:
+                rebalance_dates.append(date)
+                current_month = year_month
+
+    else:
+        raise ValueError(f"Invalid frequency: {frequency}. Must be 'weekly' or 'monthly'")
+
+    logger.info(f"Found {len(rebalance_dates)} {frequency} rebalance dates")
     return rebalance_dates
+
+
+def select_defensive_portfolio(
+    defensive_allocation: Dict,
+    signals: Dict[str, pd.DataFrame],
+    date: pd.Timestamp,
+    top_n: int = 3,
+) -> Dict[str, float]:
+    """
+    Select defensive portfolio based on defensive allocation strategy.
+
+    Args:
+        defensive_allocation: Defensive allocation dict from regime detector
+        signals: All ETF signals
+        date: Current date
+        top_n: Number of defensive ETFs to hold (if ranking)
+
+    Returns:
+        Dictionary mapping ticker to allocation weight
+    """
+    mode = defensive_allocation.get('mode')
+
+    if mode == 'defensive_sectors':
+        # Rank defensive sectors by RS and select top N
+        defensive_tickers = defensive_allocation['tickers']
+
+        # Get RS values for defensive sectors
+        defensive_rs = []
+        for ticker in defensive_tickers:
+            if ticker in signals:
+                ticker_signals = signals[ticker]
+                if date in ticker_signals.index:
+                    row = ticker_signals.loc[date]
+                    defensive_rs.append({
+                        'ticker': ticker,
+                        'rs_roc': row.get('rs_roc', 0),
+                    })
+
+        # Sort by RS ROC
+        defensive_rs = sorted(defensive_rs, key=lambda x: x['rs_roc'], reverse=True)
+
+        # Select top N
+        selected_n = min(top_n, len(defensive_rs))
+        if selected_n == 0:
+            # No defensive sectors available, return empty
+            return {}
+
+        weight = 1.0 / selected_n
+        portfolio = {}
+        for i in range(selected_n):
+            portfolio[defensive_rs[i]['ticker']] = weight
+
+        return portfolio
+
+    elif mode == 'tbills':
+        # 100% T-Bills
+        return defensive_allocation.get('allocation', {})
+
+    elif mode == 'hybrid':
+        # Split between T-Bills and defensive sectors
+        tbill_ticker = defensive_allocation['tbill_ticker']
+        tbill_allocation = defensive_allocation['tbill_allocation']
+        defensive_sectors = defensive_allocation['defensive_sectors']
+        sector_allocation = defensive_allocation['sector_allocation']
+
+        portfolio = {tbill_ticker: tbill_allocation}
+
+        # Equal-weight defensive sectors with remaining allocation
+        if len(defensive_sectors) > 0:
+            sector_weight = sector_allocation / len(defensive_sectors)
+            for ticker in defensive_sectors:
+                portfolio[ticker] = sector_weight
+
+        return portfolio
+
+    elif mode in ['tiered_extreme', 'tiered_high']:
+        # Tiered mode
+        if mode == 'tiered_extreme':
+            # Extreme vol: 100% T-Bills
+            return defensive_allocation.get('allocation', {})
+        else:
+            # High vol: Defensive sectors ranked by RS
+            return select_defensive_portfolio(
+                {
+                    'mode': 'defensive_sectors',
+                    'tickers': defensive_allocation['tickers']
+                },
+                signals,
+                date,
+                top_n,
+            )
+
+    return {}
 
 
 def select_portfolio(
@@ -99,9 +207,10 @@ def run_backtest(
     initial_capital: float,
     top_n: int,
     regime_detector: Optional[any] = None,
+    rebalance_frequency: str = "monthly",
 ) -> Tuple[pd.DataFrame, pd.DataFrame, List[Dict]]:
     """
-    Run the full backtest simulation with monthly rebalancing.
+    Run the full backtest simulation with configurable rebalancing frequency.
 
     Args:
         signals: Dictionary of signals DataFrames for each ETF
@@ -112,6 +221,7 @@ def run_backtest(
         initial_capital: Starting capital
         top_n: Number of ETFs to hold (default, overridden by regime if detector provided)
         regime_detector: Optional VolatilityRegime instance for regime-based adjustments
+        rebalance_frequency: "weekly" or "monthly" (default: "monthly")
 
     Returns:
         Tuple of:
@@ -120,7 +230,7 @@ def run_backtest(
         - rebalance_log: List of dicts with rebalance details
     """
     # Get rebalance dates
-    rebalance_dates = get_rebalance_dates(price_data, start_date, end_date)
+    rebalance_dates = get_rebalance_dates(price_data, start_date, end_date, rebalance_frequency)
 
     # Get all trading dates in backtest period
     mask = (price_data.index >= start_date) & (price_data.index <= end_date)
@@ -153,8 +263,14 @@ def run_backtest(
 
             if regime_detector is not None:
                 # Detect volatility regime
-                spy_prices = price_data[spy_ticker]
-                regime = regime_detector.detect_regime(spy_prices, date)
+                spy_prices_series = price_data[spy_ticker]
+
+                # Check if VIX is available and needed
+                vix_prices = None
+                if regime_detector.use_vix and '^VIX' in price_data.columns:
+                    vix_prices = price_data['^VIX']
+
+                regime = regime_detector.detect_regime(spy_prices_series, date, vix_prices)
                 regime_params = regime_detector.get_regime_parameters(regime)
                 active_top_n = regime_params['top_n']
                 regime_info = regime_params['regime']
@@ -164,14 +280,30 @@ def run_backtest(
             # Get qualifying ETFs
             qualifying = get_qualifying_etfs(signals, date)
 
-            # Select portfolio with regime-adjusted top_n
-            new_holdings = select_portfolio(qualifying, active_top_n, spy_ticker)
-
-            # Adjust portfolio for regime constraints (e.g., min SPY allocation)
+            # Check for defensive portfolio override
+            defensive_allocation = None
             if regime_detector is not None:
-                new_holdings = regime_detector.adjust_portfolio_for_regime(
-                    new_holdings, regime_params, spy_ticker
+                spy_prices_series = price_data[spy_ticker]
+                defensive_allocation = regime_detector.get_defensive_portfolio_allocation(
+                    regime, qualifying, spy_prices_series, date
                 )
+
+            # Select portfolio
+            if defensive_allocation is not None:
+                # Use defensive allocation strategy
+                new_holdings = select_defensive_portfolio(
+                    defensive_allocation, signals, date, top_n=3
+                )
+                logger.info(f"  Using defensive allocation: {defensive_allocation.get('mode')}")
+            else:
+                # Normal portfolio selection with regime-adjusted top_n
+                new_holdings = select_portfolio(qualifying, active_top_n, spy_ticker)
+
+                # Adjust portfolio for regime constraints (e.g., min SPY allocation)
+                if regime_detector is not None:
+                    new_holdings = regime_detector.adjust_portfolio_for_regime(
+                        new_holdings, regime_params, spy_ticker
+                    )
 
             # Log rebalance
             rebalance_info = {
