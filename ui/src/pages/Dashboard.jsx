@@ -2,28 +2,48 @@ import { useState, useEffect } from 'react'
 import { dashboardAPI } from '../services/api'
 import './Dashboard.css'
 
+// Helper function to get universe from URL on initial load
+const getInitialUniverse = () => {
+  const params = new URLSearchParams(window.location.search)
+  const universeParam = params.get('universe')
+  if (universeParam && ['sp500', 'emerging', 'developed'].includes(universeParam)) {
+    console.log('📍 Initializing universe from URL:', universeParam)
+    return universeParam
+  }
+  return 'sp500'
+}
+
 function Dashboard() {
-  const [universe, setUniverse] = useState('sp500')
+  const [universe, setUniverse] = useState(getInitialUniverse)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [data, setData] = useState(null)
 
-  useEffect(() => {
-    fetchDashboard()
-  }, [universe])
-
+  // Fetch dashboard data
   const fetchDashboard = async () => {
+    console.log('📊 Fetching dashboard data for:', universe)
     setLoading(true)
     setError(null)
     try {
       const result = await dashboardAPI.getDashboard(universe)
+      console.log('✅ Dashboard data received:', result)
       setData(result)
+      setLoading(false)
     } catch (err) {
+      console.error('❌ Dashboard error:', err)
       setError(err.message)
-    } finally {
       setLoading(false)
     }
   }
+
+  // Debug logging
+  useEffect(() => {
+    console.log('🎨 Dashboard state:', { loading, hasData: !!data, hasError: !!error })
+  }, [loading, data, error])
+
+  useEffect(() => {
+    fetchDashboard()
+  }, [universe])
 
   const formatNumber = (num, decimals = 2) => {
     if (num === null || num === undefined) return 'N/A'
@@ -34,6 +54,11 @@ function Dashboard() {
     if (num === null || num === undefined) return 'N/A'
     const value = Number(num).toFixed(decimals)
     return `${value}%`
+  }
+
+  const formatCurrency = (num) => {
+    if (num === null || num === undefined) return 'N/A'
+    return `$${Number(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   }
 
   const getChangeClass = (value) => {
@@ -66,13 +91,22 @@ function Dashboard() {
     )
   }
 
+  console.log('🎨 Rendering Dashboard with data')
+
   return (
     <div className="container">
       <div className="page-header">
         <h1 className="page-title">Strategy Dashboard</h1>
         <p className="page-description">
-          Current portfolio status and performance metrics
+          YTD Backtest Simulation - Weekly Momentum Rebalancing vs SPY Buy & Hold
         </p>
+      </div>
+
+      {/* Simulation Info Banner */}
+      <div className="alert alert-info" style={{ marginBottom: '1.5rem' }}>
+        <strong>📊 Simulation Parameters:</strong> Starting from January 1, 2026 with $100,000 initial capital.
+        The strategy rebalances weekly based on relative strength momentum signals (top 3 holdings, equal weight).
+        Benchmark: $100,000 invested in SPY (buy and hold, no rebalancing).
       </div>
 
       {/* Universe Selector */}
@@ -91,172 +125,169 @@ function Dashboard() {
         </div>
       </div>
 
-      {/* Current Holdings */}
-      <div className="card">
-        <div className="card-header">
-          <h2 className="card-title">Current Holdings</h2>
-          <p className="card-subtitle">
-            Top {data?.current_holdings?.length || 0} ETFs based on relative strength
-          </p>
-        </div>
-
-        {data?.current_holdings && data.current_holdings.length > 0 ? (
-          <div className="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Ticker</th>
-                  <th>Name</th>
-                  <th className="text-right">RS Ratio</th>
-                  <th className="text-right">ROC %</th>
-                  <th className="text-right">SMA Status</th>
-                  <th className="text-right">Allocation</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.current_holdings.map((holding) => (
-                  <tr key={holding.ticker}>
-                    <td className="text-bold">{holding.ticker}</td>
-                    <td>{holding.name}</td>
-                    <td className="text-right">{formatNumber(holding.rs_ratio, 3)}</td>
-                    <td className={`text-right ${getChangeClass(holding.roc_pct)}`}>
-                      {formatPercent(holding.roc_pct)}
-                    </td>
-                    <td className="text-right">
-                      <span className={`badge ${holding.sma_status ? 'badge-success' : 'badge-danger'}`}>
-                        {holding.sma_status ? 'Above SMA' : 'Below SMA'}
-                      </span>
-                    </td>
-                    <td className="text-right text-bold">
-                      {formatPercent(holding.allocation, 1)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="alert alert-info">
-            No holdings found for this universe. Try running signals generation.
-          </div>
-        )}
-      </div>
-
-      {/* Strategy Parameters */}
-      <div className="card">
-        <div className="card-header">
-          <h2 className="card-title">Strategy Parameters</h2>
-          <p className="card-subtitle">Current configuration</p>
-        </div>
-
-        {data?.parameters && (
-          <div className="grid grid-4">
-            <div className="stat-card">
-              <div className="stat-label">Top N Holdings</div>
-              <div className="stat-value">{data.parameters.top_n}</div>
+      {/* YTD Performance Metrics */}
+      {data && (
+        <>
+          <div className="card">
+            <div className="card-header">
+              <h2 className="card-title">📈 YTD Backtest Results</h2>
+              <p className="card-subtitle">
+                Simulation Period: January 1, 2026 → {data.as_of_date} | Initial Investment: $100,000
+              </p>
             </div>
 
-            <div className="stat-card">
-              <div className="stat-label">SMA Lookback</div>
-              <div className="stat-value">{data.parameters.sma_days}</div>
-              <div className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>
-                days (~{Math.round(data.parameters.sma_days / 21)} months)
+            <div className="grid grid-3">
+              <div className="metric-card">
+                <div className="metric-label">Strategy Portfolio Value</div>
+                <div className="metric-value">
+                  {formatCurrency(data.portfolio_value)}
+                </div>
+                <div className={`metric-change ${getChangeClass(data.ytd_return)}`}>
+                  {formatPercent(data.ytd_return)} YTD
+                  {data.ytd_return !== 0 && (
+                    <span style={{ fontSize: '0.875rem', marginLeft: '0.5rem' }}>
+                      ({data.ytd_return > 0 ? '+' : ''}{formatCurrency(data.portfolio_value - 100000)})
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="metric-card">
+                <div className="metric-label">SPY Benchmark Value</div>
+                <div className="metric-value">
+                  {formatCurrency(data.spy_value)}
+                </div>
+                <div className={`metric-change ${getChangeClass(data.spy_return)}`}>
+                  {formatPercent(data.spy_return)} YTD
+                  {data.spy_return !== 0 && (
+                    <span style={{ fontSize: '0.875rem', marginLeft: '0.5rem' }}>
+                      ({data.spy_return > 0 ? '+' : ''}{formatCurrency(data.spy_value - 100000)})
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="metric-card">
+                <div className="metric-label">Strategy vs SPY</div>
+                <div className={`metric-value ${getChangeClass(data.outperformance)}`}>
+                  {formatPercent(data.outperformance, 2)}
+                </div>
+                <div className={`metric-change ${getChangeClass(data.portfolio_value - data.spy_value)}`}>
+                  {data.portfolio_value > data.spy_value ? '+' : ''}{formatCurrency(data.portfolio_value - data.spy_value)} difference
+                </div>
               </div>
             </div>
 
-            <div className="stat-card">
-              <div className="stat-label">ROC Lookback</div>
-              <div className="stat-value">{data.parameters.roc_days}</div>
-              <div className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>
-                days (~{Math.round(data.parameters.roc_days / 21)} months)
+            <div className="grid grid-3" style={{ marginTop: '1rem' }}>
+              <div className="metric-card">
+                <div className="metric-label">Sharpe Ratio</div>
+                <div className="metric-value">
+                  {formatNumber(data.sharpe_ratio, 3)}
+                </div>
               </div>
-            </div>
 
-            <div className="stat-card">
-              <div className="stat-label">Rebalance Frequency</div>
-              <div className="stat-value" style={{ fontSize: '1.25rem' }}>
-                {data.parameters.rebalance_freq}
+              <div className="metric-card">
+                <div className="metric-label">Max Drawdown</div>
+                <div className="metric-value negative">
+                  {formatPercent(data.max_drawdown, 2)}
+                </div>
               </div>
-            </div>
-          </div>
-        )}
-      </div>
 
-      {/* Performance Summary */}
-      {data?.performance && (
-        <div className="card">
-          <div className="card-header">
-            <h2 className="card-title">Latest Performance</h2>
-            <p className="card-subtitle">Most recent backtest results</p>
-          </div>
-
-          <div className="grid grid-3">
-            <div className="stat-card">
-              <div className="stat-label">Total Return</div>
-              <div className={`stat-value ${getChangeClass(data.performance.total_return)}`}>
-                {formatPercent(data.performance.total_return, 2)}
-              </div>
-            </div>
-
-            <div className="stat-card">
-              <div className="stat-label">Sharpe Ratio</div>
-              <div className="stat-value">
-                {formatNumber(data.performance.sharpe_ratio, 3)}
-              </div>
-            </div>
-
-            <div className="stat-card">
-              <div className="stat-label">Max Drawdown</div>
-              <div className="stat-value text-danger">
-                {formatPercent(data.performance.max_drawdown, 2)}
+              <div className="metric-card">
+                <div className="metric-label">Volatility Regime</div>
+                <div className="metric-value" style={{ fontSize: '1rem' }}>
+                  {data.volatility_regime?.replace('_', ' ')}
+                </div>
               </div>
             </div>
           </div>
 
-          {data.performance.vs_spy !== null && (
-            <div className="alert alert-info" style={{ marginTop: '1rem' }}>
-              <strong>vs SPY:</strong> {formatPercent(data.performance.vs_spy, 2)} outperformance
+          {/* Current Holdings */}
+          <div className="card">
+            <div className="card-header">
+              <h2 className="card-title">💼 Current Portfolio Holdings</h2>
+              <p className="card-subtitle">
+                As of latest rebalance ({data.as_of_date}) - Top {data.current_holdings?.length || 0} ETFs ranked by relative strength momentum (equal weight: {data.current_holdings?.length > 0 ? formatPercent((1 / data.current_holdings.length) * 100, 1) : 'N/A'} each)
+              </p>
+            </div>
+
+            {data.current_holdings && data.current_holdings.length > 0 ? (
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Rank</th>
+                      <th>Ticker</th>
+                      <th>Name</th>
+                      <th className="text-right">RS ROC</th>
+                      <th className="text-right">Weight</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.current_holdings.map((holding, idx) => (
+                      <tr key={holding.ticker || idx}>
+                        <td className="text-bold">{holding.rank}</td>
+                        <td className="text-bold" style={{ color: '#2563eb' }}>{holding.ticker}</td>
+                        <td>{holding.name}</td>
+                        <td className="text-right positive">
+                          {formatPercent(holding.rs_roc * 100, 2)}
+                        </td>
+                        <td className="text-right text-bold">
+                          {formatPercent(holding.weight * 100, 1)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="alert alert-info">
+                No current holdings. Generate signals to see recommendations.
+              </div>
+            )}
+          </div>
+
+          {/* Monthly Performance Breakdown */}
+          {data.ytd_summary && data.ytd_summary.length > 0 && (
+            <div className="card">
+              <div className="card-header">
+                <h2 className="card-title">📊 Monthly Performance Breakdown</h2>
+                <p className="card-subtitle">
+                  Monthly returns with weekly rebalancing - Strategy vs SPY Buy & Hold
+                </p>
+              </div>
+
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Month</th>
+                      <th className="text-right">Strategy Return</th>
+                      <th className="text-right">SPY Return</th>
+                      <th className="text-right">Outperformance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.ytd_summary.map((month, idx) => (
+                      <tr key={idx}>
+                        <td className="text-bold">{month.month}</td>
+                        <td className={`text-right ${getChangeClass(month.strategy_return)}`}>
+                          {formatPercent(month.strategy_return, 2)}
+                        </td>
+                        <td className={`text-right ${getChangeClass(month.spy_return)}`}>
+                          {formatPercent(month.spy_return, 2)}
+                        </td>
+                        <td className={`text-right ${getChangeClass(month.outperformance)}`}>
+                          {formatPercent(month.outperformance, 2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* ETF Universe Info */}
-      {data?.universe_info && (
-        <div className="card">
-          <div className="card-header">
-            <h2 className="card-title">ETF Universe</h2>
-            <p className="card-subtitle">{data.universe_info.count} ETFs available</p>
-          </div>
-
-          <div className="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Ticker</th>
-                  <th>Name</th>
-                  <th>Category</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.universe_info.etfs.map((etf) => (
-                  <tr key={etf.ticker}>
-                    <td className="text-bold">{etf.ticker}</td>
-                    <td>{etf.name}</td>
-                    <td>{etf.category || 'N/A'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Last Updated */}
-      {data?.last_updated && (
-        <div className="text-center text-muted" style={{ fontSize: '0.875rem', marginTop: '2rem' }}>
-          Last updated: {new Date(data.last_updated).toLocaleString()}
-        </div>
+        </>
       )}
     </div>
   )

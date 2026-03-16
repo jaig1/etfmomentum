@@ -42,23 +42,24 @@ async def get_dashboard_data(
         etf_universe = load_universe_by_name(universe, config.ETFLIST_DIR)
         etf_tickers = list(etf_universe.keys())
 
-        # Get price data - use cached data
+        # Calculate YTD dates dynamically
+        from datetime import datetime
+        current_year = datetime.now().year
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        ytd_start = f"{current_year}-01-01"
+
+        # Get price data - fetch up to current date for YTD backtest
         all_tickers = etf_tickers + [config.BENCHMARK_TICKER]
 
         price_data = get_price_data(
             ticker_list=all_tickers,
             start_date=config.DATA_START_DATE,
-            end_date=config.BACKTEST_END_DATE,
+            end_date=current_date,  # Use current date, not hardcoded config value
             api_key=config.FMP_API_KEY,
             cache_path=str(config.PRICE_DATA_CACHE),
-            force_refresh=False,  # Use cache for dashboard
+            force_refresh=True,  # Always fetch fresh data (no caching)
             api_delay=config.FMP_API_DELAY,
         )
-
-        # Calculate YTD dates dynamically
-        from datetime import datetime
-        current_year = datetime.now().year
-        ytd_start = f"{current_year}-01-01"
 
         # Generate signals
         signals = generate_signals(

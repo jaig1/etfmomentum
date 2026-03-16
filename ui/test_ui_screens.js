@@ -12,7 +12,7 @@ async function testDashboardScreen(page) {
     console.log('='.repeat(70));
 
     try {
-        await page.goto('http://localhost:3000/', { waitUntil: 'networkidle', timeout: 15000 });
+        await page.goto('http://localhost:3001/', { waitUntil: 'networkidle', timeout: 15000 });
 
         // Wait for loading spinner to disappear
         await page.waitForSelector('.loading-container', { state: 'hidden', timeout: 20000 }).catch(() => {});
@@ -102,7 +102,7 @@ async function main() {
     console.log('='.repeat(70));
     console.log('ETF MOMENTUM STRATEGY - UI SCREEN TEST');
     console.log('='.repeat(70));
-    console.log('Testing UI at: http://localhost:3000');
+    console.log('Testing UI at: http://localhost:3001');
 
     // Create screenshots directory
     if (!fs.existsSync('screenshots')) {
