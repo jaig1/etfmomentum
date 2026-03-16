@@ -2,7 +2,7 @@
 
 import pandas as pd
 import numpy as np
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Any
 import logging
 
 logger = logging.getLogger(__name__)
@@ -281,7 +281,7 @@ class VolatilityRegime:
     def get_regime_parameters(
         self,
         regime: str,
-    ) -> Dict[str, any]:
+    ) -> Dict[str, Any]:
         """
         Get strategy parameters for a given regime.
 
@@ -313,7 +313,7 @@ class VolatilityRegime:
     def adjust_portfolio_for_regime(
         self,
         portfolio: Dict[str, float],
-        regime_params: Dict[str, any],
+        regime_params: Dict[str, Any],
         spy_ticker: str,
     ) -> Dict[str, float]:
         """
@@ -391,7 +391,7 @@ class VolatilityRegime:
         qualifying_etfs: pd.DataFrame,
         spy_prices: pd.Series,
         date: pd.Timestamp,
-    ) -> Dict[str, any]:
+    ) -> Dict[str, Any]:
         """
         Get defensive portfolio allocation based on regime and mode.
 

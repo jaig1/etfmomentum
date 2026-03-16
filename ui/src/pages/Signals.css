@@ -1,0 +1,76 @@
+/* Signals specific styles */
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+}
+
+.form-actions {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.highlight-row {
+  background-color: #f0f9ff !important;
+  font-weight: 500;
+}
+
+.highlight-row:hover {
+  background-color: #e0f2fe !important;
+}
+
+.signal-ticker {
+  color: var(--primary-color);
+  font-size: 1rem;
+}
+
+.signal-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.signal-status-card {
+  background: var(--bg-color);
+  padding: 1rem;
+  border-radius: 6px;
+  border-left: 4px solid var(--border-color);
+}
+
+.signal-status-card.pass {
+  border-left-color: var(--success-color);
+}
+
+.signal-status-card.fail {
+  border-left-color: var(--danger-color);
+}
+
+.signal-ticker-large {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.signal-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.signal-metric {
+  display: flex;
+  justify-content: space-between;
+}
+
+.signal-metric-label {
+  color: var(--text-secondary);
+}
+
+.signal-metric-value {
+  font-weight: 600;
+}

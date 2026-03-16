@@ -20,6 +20,12 @@ This framework implements a **quantitative momentum strategy** with advanced opt
 - **Baseline (Before Optimization):** +270% total return (+29% vs SPY), Sharpe 0.574
 - SPY Benchmark: +241% total return, Sharpe 0.951
 
+**YTD 2026 Performance (Jan 1 - Mar 16, 2026):**
+- **S&P 500 Sectors:** +9.77% (+11.75% vs SPY), Sharpe 3.156, Max DD -4.87%
+- **SPY Benchmark:** -1.98%, Sharpe -1.268
+- **Current Holdings (as of Mar 16, 2026):**
+  - SP500: XLE (Energy), XLU (Utilities), XLB (Materials) - 33% each
+
 ---
 
 ## Quick Start for Future Sessions
@@ -65,9 +71,43 @@ Get your API key at: https://financialmodelingprep.com/developer/docs/
 
 ## Usage
 
-The framework has two primary modes: **backtest** (historical simulation) and **signal** (live recommendations).
+The framework provides both a **Web UI** and **CLI** interface for backtesting and signal generation.
 
-### Signal Generation (Most Common Use Case)
+### Web UI (Recommended)
+
+The React-based web interface provides an intuitive way to interact with the strategy:
+
+```bash
+# Terminal 1: Start the API server
+cd /Users/jaig/etfmomentum
+uv run uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+# Terminal 2: Start the React UI
+cd ui
+npm run dev
+```
+
+Then open http://localhost:3000 in your browser.
+
+**Features:**
+- **Dashboard**: View YTD performance, current holdings, portfolio metrics
+- **Signals**: Generate buy/sell/hold recommendations with rebalancing actions
+- **Backtest**: Run historical simulations with customizable date ranges
+
+**Testing:**
+```bash
+# Test API endpoints
+python test_ui_integration.py
+
+# Test UI screens (requires Playwright)
+cd ui && node test_ui_screens.js
+```
+
+---
+
+### CLI Interface
+
+#### Signal Generation (Most Common Use Case)
 
 Generate current month portfolio recommendations:
 

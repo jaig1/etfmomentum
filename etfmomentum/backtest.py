@@ -2,7 +2,7 @@
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 from datetime import datetime
 import logging
 
@@ -206,7 +206,7 @@ def run_backtest(
     end_date: str,
     initial_capital: float,
     top_n: int,
-    regime_detector: Optional[any] = None,
+    regime_detector: Optional[Any] = None,
     rebalance_frequency: str = "monthly",
 ) -> Tuple[pd.DataFrame, pd.DataFrame, List[Dict]]:
     """
