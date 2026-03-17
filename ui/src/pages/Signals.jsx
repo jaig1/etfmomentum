@@ -1,58 +1,59 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { signalsAPI } from '../services/api'
 import './Signals.css'
 
 function Signals() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [results, setResults] = useState(null)
+  const [data, setData] = useState(null)
+  const [universe, setUniverse] = useState('sp500')
 
-  const [formData, setFormData] = useState({
-    universe: 'sp500',
-    detailed: true,
-    refresh: false,
-  })
+  // Debug logging for state changes
+  useEffect(() => {
+    console.log('State updated - loading:', loading, 'hasData:', !!data, 'hasError:', !!error)
+  }, [loading, data, error])
 
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }))
-  }
+  const handleGenerateSignals = async () => {
+    console.log('🚀 Starting signal generation for:', universe)
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
+    // Clear previous state
     setError(null)
-    setResults(null)
+    setData(null)
+    setLoading(true)
+    console.log('⏳ Loading state set to TRUE')
 
     try {
-      const result = await signalsAPI.generateSignals(formData)
-      setResults(result)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
+      const result = await signalsAPI.generateSignals({
+        universe,
+        top_n: 3
+      })
+      console.log('✅ API response received:', result)
+      console.log('📊 Portfolio items:', result?.recommended_portfolio?.length)
 
-  const formatNumber = (num, decimals = 2) => {
-    if (num === null || num === undefined) return 'N/A'
-    return Number(num).toFixed(decimals)
+      // Update state with results
+      setData(result)
+      console.log('💾 Data state updated')
+
+      // Small delay to ensure data is set before clearing loading
+      setTimeout(() => {
+        setLoading(false)
+        console.log('✅ Loading state set to FALSE')
+      }, 0)
+
+    } catch (err) {
+      console.error('❌ Error generating signals:', err)
+      setError(err.message || 'Failed to generate signals')
+      setLoading(false)
+      console.log('❌ Loading state set to FALSE (error)')
+    }
   }
 
   const formatPercent = (num, decimals = 2) => {
     if (num === null || num === undefined) return 'N/A'
-    const value = Number(num).toFixed(decimals)
-    return `${value}%`
+    return `${(num * 100).toFixed(decimals)}%`
   }
 
-  const getChangeClass = (value) => {
-    if (value > 0) return 'positive'
-    if (value < 0) return 'negative'
-    return ''
-  }
+  console.log('🎨 Rendering Signals component - loading:', loading, 'hasData:', !!data)
 
   return (
     <div className="container">
@@ -63,72 +64,38 @@ function Signals() {
         </p>
       </div>
 
-      {/* Configuration Form */}
+      {/* Configuration */}
       <div className="card">
         <div className="card-header">
           <h2 className="card-title">Configuration</h2>
-          <p className="card-subtitle">Set parameters for signal generation</p>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="grid grid-2">
-            <div className="form-group">
-              <label className="form-label">ETF Universe</label>
-              <select
-                name="universe"
-                className="form-select"
-                value={formData.universe}
-                onChange={handleInputChange}
-                disabled={loading}
-              >
-                <option value="sp500">S&P 500 Sector ETFs (11 sectors)</option>
-                <option value="developed">Developed Market ETFs</option>
-                <option value="emerging">Emerging Market ETFs</option>
-              </select>
-            </div>
+        <div className="form-group">
+          <label className="form-label">ETF Universe</label>
+          <select
+            className="form-select"
+            value={universe}
+            onChange={(e) => setUniverse(e.target.value)}
+            disabled={loading}
+          >
+            <option value="sp500">S&P 500 Sector ETFs (11 sectors)</option>
+            <option value="emerging">Emerging Market ETFs</option>
+            <option value="developed">Developed Market ETFs</option>
+          </select>
+        </div>
 
-            <div className="form-group">
-              <label className="form-label">Options</label>
-              <div className="checkbox-group">
-                <div className="form-checkbox">
-                  <input
-                    type="checkbox"
-                    id="detailed"
-                    name="detailed"
-                    checked={formData.detailed}
-                    onChange={handleInputChange}
-                    disabled={loading}
-                  />
-                  <label htmlFor="detailed">Show detailed status for all ETFs</label>
-                </div>
-                <div className="form-checkbox">
-                  <input
-                    type="checkbox"
-                    id="refresh"
-                    name="refresh"
-                    checked={formData.refresh}
-                    onChange={handleInputChange}
-                    disabled={loading}
-                  />
-                  <label htmlFor="refresh">Refresh data from API (latest prices)</label>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="form-actions">
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={loading}
-            >
-              {loading ? 'Generating Signals...' : 'Generate Signals'}
-            </button>
-          </div>
-        </form>
+        <div className="form-actions">
+          <button
+            onClick={handleGenerateSignals}
+            className="btn btn-primary"
+            disabled={loading}
+          >
+            {loading ? 'Generating Signals...' : 'Generate Signals'}
+          </button>
+        </div>
       </div>
 
-      {/* Loading State */}
+      {/* Loading */}
       {loading && (
         <div className="card">
           <div className="loading-container">
@@ -138,81 +105,129 @@ function Signals() {
         </div>
       )}
 
-      {/* Error State */}
-      {error && (
+      {/* Error */}
+      {error && !loading && (
         <div className="alert alert-error">
           <strong>Error:</strong> {error}
         </div>
       )}
 
       {/* Results */}
-      {results && !loading && (
-        <>
-          {/* Success Message */}
-          <div className="alert alert-success">
-            <strong>Success!</strong> Signals generated successfully for {results.universe} universe.
-          </div>
+      {data && !loading && (() => {
+        console.log('📊 Rendering results section - data exists and not loading')
+        return (
+          <>
+            <div className="alert alert-success">
+              <strong>Success!</strong> Generated signals for {data.universe} ({data.as_of_date})
+            </div>
 
-          {/* Top Holdings (BUY Signals) */}
+          {/* Recommended Portfolio */}
           <div className="card">
             <div className="card-header">
-              <h2 className="card-title">Top Holdings - BUY Signals</h2>
+              <h2 className="card-title">📊 Recommended Portfolio</h2>
               <p className="card-subtitle">
-                {results.top_holdings?.length || 0} ETFs recommended for current month
+                Top {data.recommended_portfolio?.length || 0} ETFs for current allocation
               </p>
             </div>
 
-            {results.top_holdings && results.top_holdings.length > 0 ? (
+            {data.recommended_portfolio && data.recommended_portfolio.length > 0 ? (
               <div className="table-container">
                 <table>
                   <thead>
                     <tr>
                       <th>Rank</th>
                       <th>Ticker</th>
-                      <th className="text-right">RS Ratio</th>
-                      <th className="text-right">ROC %</th>
-                      <th className="text-right">Price</th>
-                      <th className="text-right">SMA ({results.parameters?.sma_days}d)</th>
-                      <th className="text-right">Allocation</th>
-                      <th>Action</th>
+                      <th>Name</th>
+                      <th className="text-right">RS ROC</th>
+                      <th className="text-right">Weight</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {results.top_holdings.map((signal, index) => (
-                      <tr key={signal.ticker} className="highlight-row">
-                        <td className="text-bold">{index + 1}</td>
-                        <td className="text-bold signal-ticker">{signal.ticker}</td>
-                        <td className="text-right">{formatNumber(signal.rs_ratio, 3)}</td>
-                        <td className={`text-right ${getChangeClass(signal.roc_pct)}`}>
-                          {formatPercent(signal.roc_pct)}
-                        </td>
-                        <td className="text-right">${formatNumber(signal.price)}</td>
-                        <td className="text-right">${formatNumber(signal.sma)}</td>
-                        <td className="text-right text-bold">
-                          {formatPercent(signal.allocation, 1)}
-                        </td>
-                        <td>
-                          <span className="badge badge-success">BUY</span>
-                        </td>
-                      </tr>
-                    ))}
+                    {data.recommended_portfolio.map((holding, idx) => {
+                      try {
+                        return (
+                          <tr key={holding.ticker || idx}>
+                            <td className="text-bold">{holding.rank}</td>
+                            <td className="text-bold signal-ticker">{holding.ticker}</td>
+                            <td>{holding.name}</td>
+                            <td className="text-right positive">
+                              {formatPercent(holding.rs_roc)}
+                            </td>
+                            <td className="text-right text-bold">
+                              {formatPercent(holding.weight, 1)}
+                            </td>
+                          </tr>
+                        )
+                      } catch (err) {
+                        console.error('Error rendering holding row:', err, holding)
+                        return null
+                      }
+                    })}
                   </tbody>
                 </table>
               </div>
             ) : (
-              <div className="alert alert-warning">
-                No ETFs currently meet the buy criteria (positive RS ratio and above SMA).
-              </div>
+              <p>No portfolio recommendations available</p>
             )}
           </div>
 
-          {/* All ETF Status (if detailed mode) */}
-          {formData.detailed && results.all_etf_status && (
+          {/* Rebalancing Actions */}
+          <div className="card">
+            <div className="card-header">
+              <h2 className="card-title">🔄 Rebalancing Actions</h2>
+              <p className="card-subtitle">{data.rebalancing_summary || 'No summary available'}</p>
+            </div>
+
+            {data.rebalancing_actions && data.rebalancing_actions.length > 0 ? (
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Ticker</th>
+                      <th className="text-right">Current</th>
+                      <th className="text-right">Recommended</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.rebalancing_actions.map((action, idx) => {
+                      try {
+                        return (
+                          <tr key={action.ticker || idx}>
+                            <td className="text-bold signal-ticker">{action.ticker}</td>
+                            <td className="text-right">{formatPercent(action.current_weight, 1)}</td>
+                            <td className="text-right">{formatPercent(action.recommended_weight, 1)}</td>
+                            <td>
+                              <span className={`badge ${
+                                action.action === 'BUY' ? 'badge-success' :
+                                action.action === 'SELL' ? 'badge-danger' :
+                                'badge-info'
+                              }`}>
+                                {action.action}
+                              </span>
+                            </td>
+                          </tr>
+                        )
+                      } catch (err) {
+                        console.error('Error rendering action row:', err, action)
+                        return null
+                      }
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p>No rebalancing actions needed</p>
+            )}
+          </div>
+
+          {/* All ETF Status */}
+          {data.all_etf_status && data.all_etf_status.length > 0 && (
             <div className="card">
               <div className="card-header">
-                <h2 className="card-title">All ETF Status</h2>
+                <h2 className="card-title">📈 All ETF Status</h2>
                 <p className="card-subtitle">
-                  Complete status for all {results.all_etf_status.length} ETFs in universe
+                  Complete status for all {data.all_etf_status.length} ETFs in universe
                 </p>
               </div>
 
@@ -220,96 +235,48 @@ function Signals() {
                 <table>
                   <thead>
                     <tr>
+                      <th>Rank</th>
                       <th>Ticker</th>
-                      <th className="text-right">RS Ratio</th>
-                      <th className="text-right">ROC %</th>
                       <th className="text-right">Price</th>
-                      <th className="text-right">SMA</th>
-                      <th className="text-right">Above SMA</th>
-                      <th className="text-right">RS Filter</th>
-                      <th className="text-right">Dual Filter</th>
+                      <th className="text-right">RS ROC</th>
+                      <th>RS Filter</th>
+                      <th>Abs Filter</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {results.all_etf_status.map((etf) => (
-                      <tr key={etf.ticker}>
-                        <td className="text-bold">{etf.ticker}</td>
-                        <td className="text-right">{formatNumber(etf.rs_ratio, 3)}</td>
-                        <td className={`text-right ${getChangeClass(etf.roc_pct)}`}>
-                          {formatPercent(etf.roc_pct)}
-                        </td>
-                        <td className="text-right">${formatNumber(etf.price)}</td>
-                        <td className="text-right">${formatNumber(etf.sma)}</td>
-                        <td className="text-right">
-                          <span className={`badge ${etf.above_sma ? 'badge-success' : 'badge-danger'}`}>
-                            {etf.above_sma ? 'Yes' : 'No'}
-                          </span>
-                        </td>
-                        <td className="text-right">
-                          <span className={`badge ${etf.rs_filter_pass ? 'badge-success' : 'badge-danger'}`}>
-                            {etf.rs_filter_pass ? 'Pass' : 'Fail'}
-                          </span>
-                        </td>
-                        <td className="text-right">
-                          <span className={`badge ${etf.dual_filter_pass ? 'badge-success' : 'badge-danger'}`}>
-                            {etf.dual_filter_pass ? 'Pass' : 'Fail'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                    {data.all_etf_status.map((etf, idx) => {
+                      try {
+                        return (
+                          <tr key={etf.ticker || idx}>
+                            <td>{etf.rank || '-'}</td>
+                            <td className="text-bold">{etf.ticker}</td>
+                            <td className="text-right">${etf.price?.toFixed(2) || 'N/A'}</td>
+                            <td className="text-right">{formatPercent(etf.rs_roc)}</td>
+                            <td>
+                              <span className={`badge ${etf.rs_filter ? 'badge-success' : 'badge-danger'}`}>
+                                {etf.rs_filter ? 'Pass' : 'Fail'}
+                              </span>
+                            </td>
+                            <td>
+                              <span className={`badge ${etf.abs_filter ? 'badge-success' : 'badge-danger'}`}>
+                                {etf.abs_filter ? 'Pass' : 'Fail'}
+                              </span>
+                            </td>
+                          </tr>
+                        )
+                      } catch (err) {
+                        console.error('Error rendering ETF row:', err, etf)
+                        return null
+                      }
+                    })}
                   </tbody>
                 </table>
               </div>
             </div>
           )}
-
-          {/* Parameters Used */}
-          {results.parameters && (
-            <div className="card">
-              <div className="card-header">
-                <h2 className="card-title">Parameters Used</h2>
-              </div>
-
-              <div className="grid grid-4">
-                <div className="stat-card">
-                  <div className="stat-label">Top N Holdings</div>
-                  <div className="stat-value">{results.parameters.top_n}</div>
-                </div>
-
-                <div className="stat-card">
-                  <div className="stat-label">SMA Lookback</div>
-                  <div className="stat-value">{results.parameters.sma_days}</div>
-                  <div className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>
-                    days (~{Math.round(results.parameters.sma_days / 21)} months)
-                  </div>
-                </div>
-
-                <div className="stat-card">
-                  <div className="stat-label">ROC Lookback</div>
-                  <div className="stat-value">{results.parameters.roc_days}</div>
-                  <div className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>
-                    days (~{Math.round(results.parameters.roc_days / 21)} months)
-                  </div>
-                </div>
-
-                <div className="stat-card">
-                  <div className="stat-label">Rebalance Frequency</div>
-                  <div className="stat-value" style={{ fontSize: '1.25rem' }}>
-                    {results.parameters.rebalance_freq}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Timestamp */}
-          {results.timestamp && (
-            <div className="text-center text-muted" style={{ fontSize: '0.875rem', marginTop: '2rem' }}>
-              Generated: {new Date(results.timestamp).toLocaleString()}
-            </div>
-          )}
         </>
-      )}
+        )
+      })()}
     </div>
   )
 }

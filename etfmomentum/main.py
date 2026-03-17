@@ -124,7 +124,7 @@ def run_backtest_mode(args):
             end_date=args.end_date,
             api_key=config.FMP_API_KEY,
             cache_path=str(config.PRICE_DATA_CACHE),
-            force_refresh=args.refresh,
+            force_refresh=True,  # Always fetch fresh data (no caching)
             api_delay=config.FMP_API_DELAY,
         )
 
@@ -277,7 +277,7 @@ def run_signal_mode(args):
             end_date=end_date,
             api_key=config.FMP_API_KEY,
             cache_path=str(config.PRICE_DATA_CACHE),
-            force_refresh=args.refresh,
+            force_refresh=True,  # Always fetch fresh data (no caching)
             api_delay=config.FMP_API_DELAY,
         )
 

@@ -53,7 +53,7 @@ async def run_backtest_analysis(request: BacktestRequest):
             end_date=request.end_date,
             api_key=etf_config.FMP_API_KEY,
             cache_path=str(etf_config.PRICE_DATA_CACHE),
-            force_refresh=request.refresh_data,
+            force_refresh=True,  # Always fetch fresh data (no caching)
             api_delay=etf_config.FMP_API_DELAY,
         )
 
