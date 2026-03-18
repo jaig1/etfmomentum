@@ -10,7 +10,19 @@ load_dotenv()
 # API Configuration
 FMP_API_KEY = os.getenv("FMP_API_KEY")
 if not FMP_API_KEY:
-    raise ValueError("FMP_API_KEY not found in .env file. Please set it up.")
+    raise ValueError(
+        "\n" + "="*70 + "\n"
+        "❌ PREREQUISITE ERROR: FMP_API_KEY not found\n"
+        "="*70 + "\n"
+        "This package requires a Financial Modeling Prep API key.\n\n"
+        "To fix this, create a .env file in your project directory:\n\n"
+        "  1. Create .env file:\n"
+        "     echo 'FMP_API_KEY=your_key_here' > .env\n\n"
+        "  2. OR export environment variable:\n"
+        "     export FMP_API_KEY='your_key_here'\n\n"
+        "Get a free API key at: https://financialmodelingprep.com/developer/docs/\n"
+        "="*70
+    )
 
 # FMP API Endpoints (using stable endpoints)
 FMP_HISTORICAL_PRICE_ENDPOINT = "https://financialmodelingprep.com/stable/historical-price-eod/full"
