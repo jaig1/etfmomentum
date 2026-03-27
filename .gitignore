@@ -38,6 +38,7 @@ env/
 data/
 *.csv
 !etflist/*.csv
+!etfmomentum/etflist/*.csv
 
 # Output files
 output/

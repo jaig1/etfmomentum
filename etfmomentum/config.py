@@ -1,5 +1,6 @@
 """Configuration file for ETF Relative Strength Backtest."""
 
+import importlib.resources
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -91,7 +92,8 @@ SIGNAL_DATA_LOOKBACK_DAYS = 400  # Days to fetch for signal generation (ensures 
 PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 OUTPUT_DIR = PROJECT_ROOT / "output"
-ETFLIST_DIR = PROJECT_ROOT / "etflist"
+# Use importlib.resources so etflist/ works both from source and when installed
+ETFLIST_DIR = Path(importlib.resources.files("etfmomentum").joinpath("etflist"))
 
 # Ensure directories exist
 DATA_DIR.mkdir(exist_ok=True)
