@@ -17,7 +17,7 @@ __version__ = "0.1.0"
 # Core engine imports
 from .rs_engine import generate_signals
 from .backtest import run_backtest, get_rebalance_dates
-from .signal_generator import generate_current_signals, select_current_portfolio
+from .signal_generator import generate_current_signals, select_current_portfolio, run_signals
 from .etf_loader import load_universe_by_name as _load_universe_by_name
 from .data_fetcher import get_price_data
 from .report import (
@@ -56,6 +56,7 @@ __all__ = [
     "run_backtest",
     "generate_current_signals",
     "select_current_portfolio",
+    "run_signals",
     "get_rebalance_dates",
 
     # Data loading

@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple, Optional, Any
 from datetime import datetime
 import logging
 
-from .rs_engine import get_qualifying_etfs
+from .signal_generator import _run_signals_with_data
 
 logger = logging.getLogger(__name__)
 
@@ -199,36 +199,52 @@ def select_portfolio(
 
 
 def run_backtest(
-    signals: Dict[str, pd.DataFrame],
-    price_data: pd.DataFrame,
-    spy_ticker: str,
+    universe: str,
     start_date: str,
     end_date: str,
     initial_capital: float,
     top_n: int,
-    regime_detector: Optional[Any] = None,
     rebalance_frequency: str = "monthly",
 ) -> Tuple[pd.DataFrame, pd.DataFrame, List[Dict]]:
     """
-    Run the full backtest simulation with configurable rebalancing frequency.
+    Run the full backtest simulation.
+
+    Fetches price data from FMP for portfolio valuation. On each rebalance
+    date, delegates to run_signals() for ticker selection. Tracks daily
+    portfolio value using the fetched price data.
 
     Args:
-        signals: Dictionary of signals DataFrames for each ETF
-        price_data: DataFrame with dates as index and tickers as columns
-        spy_ticker: Benchmark ticker (SPY)
+        universe: ETF universe name ('sp500', 'developed', 'emerging')
         start_date: Backtest start date (YYYY-MM-DD)
         end_date: Backtest end date (YYYY-MM-DD)
         initial_capital: Starting capital
-        top_n: Number of ETFs to hold (default, overridden by regime if detector provided)
-        regime_detector: Optional VolatilityRegime instance for regime-based adjustments
-        rebalance_frequency: "weekly" or "monthly" (default: "monthly")
+        top_n: Number of ETFs to hold
+        rebalance_frequency: "weekly" or "monthly"
 
     Returns:
         Tuple of:
-        - strategy_returns: DataFrame with daily portfolio values
-        - benchmark_returns: DataFrame with daily SPY buy-and-hold values
+        - strategy_df: DataFrame with daily portfolio values
+        - benchmark_df: DataFrame with daily SPY buy-and-hold values
         - rebalance_log: List of dicts with rebalance details
     """
+    from . import config
+    from .etf_loader import load_universe_by_name
+    from .data_fetcher import fetch_all_data
+
+    # Load universe to know which tickers to fetch for portfolio valuation
+    etf_universe = load_universe_by_name(universe, config.ETFLIST_DIR)
+    all_tickers = list(etf_universe.keys()) + [config.BENCHMARK_TICKER, config.CASH_TICKER]
+
+    # Fetch price data from FMP for portfolio valuation
+    logger.info("Fetching price data for portfolio valuation...")
+    price_data = fetch_all_data(
+        ticker_list=all_tickers,
+        start_date=config.DATA_START_DATE,
+        end_date=end_date,
+        api_key=config.FMP_API_KEY,
+        api_delay=config.FMP_API_DELAY,
+    )
+
     # Get rebalance dates
     rebalance_dates = get_rebalance_dates(price_data, start_date, end_date, rebalance_frequency)
 
@@ -240,119 +256,86 @@ def run_backtest(
     portfolio_value = pd.Series(index=trading_dates, dtype=float)
     portfolio_value.iloc[0] = initial_capital
 
-    current_holdings = {}  # {ticker: weight}
+    current_holdings = {}
+    stop_levels = {}  # {ticker: stop_price} — 95% of entry price at rebalance
     rebalance_log = []
 
     # Benchmark: SPY buy-and-hold
-    spy_prices = price_data[spy_ticker]
+    spy_prices = price_data[config.BENCHMARK_TICKER]
     spy_start_price = spy_prices.loc[trading_dates[0]]
     spy_shares = initial_capital / spy_start_price
     benchmark_value = spy_prices.loc[trading_dates] * spy_shares
 
-    # Track current rebalance index
     next_rebalance_idx = 0
     next_rebalance_date = rebalance_dates[next_rebalance_idx]
 
-    # Iterate through each trading day
     for i, date in enumerate(trading_dates):
-        # Check if it's a rebalance date
+        # On rebalance dates, delegate to signals module for ticker selection
         if date >= next_rebalance_date:
-            # Determine parameters based on regime (if enabled)
-            active_top_n = top_n
-            regime_info = None
+            selected_tickers = _run_signals_with_data(universe=universe, price_data=price_data, date=date, top_n=top_n)
+            weight = 1.0 / len(selected_tickers)
+            new_holdings = {ticker: weight for ticker in selected_tickers}
 
-            if regime_detector is not None:
-                # Detect volatility regime
-                spy_prices_series = price_data[spy_ticker]
+            # Set stop levels at 95% of entry price for each holding
+            stop_levels = {}
+            for ticker in new_holdings:
+                if ticker in price_data.columns and pd.notna(price_data.loc[date, ticker]):
+                    stop_levels[ticker] = price_data.loc[date, ticker] * config.STOP_LOSS_THRESHOLD
 
-                # Check if VIX is available and needed
-                vix_prices = None
-                if regime_detector.use_vix and '^VIX' in price_data.columns:
-                    vix_prices = price_data['^VIX']
-
-                regime = regime_detector.detect_regime(spy_prices_series, date, vix_prices)
-                regime_params = regime_detector.get_regime_parameters(regime)
-                active_top_n = regime_params['top_n']
-                regime_info = regime_params['regime']
-
-                logger.info(f"{date.date()}: Regime={regime_info}, Top N={active_top_n}")
-
-            # Get qualifying ETFs
-            qualifying = get_qualifying_etfs(signals, date)
-
-            # Check for defensive portfolio override
-            defensive_allocation = None
-            if regime_detector is not None:
-                spy_prices_series = price_data[spy_ticker]
-                defensive_allocation = regime_detector.get_defensive_portfolio_allocation(
-                    regime, qualifying, spy_prices_series, date
-                )
-
-            # Select portfolio
-            if defensive_allocation is not None:
-                # Use defensive allocation strategy
-                new_holdings = select_defensive_portfolio(
-                    defensive_allocation, signals, date, top_n=3
-                )
-                logger.info(f"  Using defensive allocation: {defensive_allocation.get('mode')}")
-            else:
-                # Normal portfolio selection with regime-adjusted top_n
-                new_holdings = select_portfolio(qualifying, active_top_n, spy_ticker)
-
-                # Adjust portfolio for regime constraints (e.g., min SPY allocation)
-                if regime_detector is not None:
-                    new_holdings = regime_detector.adjust_portfolio_for_regime(
-                        new_holdings, regime_params, spy_ticker
-                    )
-
-            # Log rebalance
-            rebalance_info = {
+            rebalance_log.append({
                 'date': date,
-                'qualifying_count': len(qualifying),
                 'selected': list(new_holdings.keys()),
                 'weights': new_holdings.copy(),
-                'qualifying_etfs': qualifying.to_dict('records') if not qualifying.empty else [],
-                'regime': regime_info,
-                'top_n_used': active_top_n,
-            }
-            rebalance_log.append(rebalance_info)
+                'qualifying_count': len(selected_tickers),
+                'qualifying_etfs': [],
+                'regime': None,
+                'top_n_used': top_n,
+            })
 
-            logger.info(f"Rebalance on {date.date()}: {len(new_holdings)} positions")
-
-            # Update holdings
+            logger.info(f"Rebalance on {date.date()}: {selected_tickers}")
             current_holdings = new_holdings
 
-            # Move to next rebalance date
             next_rebalance_idx += 1
             if next_rebalance_idx < len(rebalance_dates):
                 next_rebalance_date = rebalance_dates[next_rebalance_idx]
             else:
                 next_rebalance_date = pd.Timestamp.max
 
-        # Calculate portfolio value based on current holdings
         if i == 0:
-            # First day - already set to initial capital
             continue
 
-        # Calculate return since previous day
+        # Check stop orders before calculating daily return
+        stopped_out = []
+        for ticker in list(current_holdings.keys()):
+            if ticker == config.CASH_TICKER:
+                continue  # SGOV is the safe haven, no stop needed
+            if ticker in stop_levels and ticker in price_data.columns:
+                curr_price = price_data.loc[date, ticker]
+                if pd.notna(curr_price) and curr_price < stop_levels[ticker]:
+                    stopped_out.append(ticker)
+                    logger.info(f"Stop triggered on {date.date()}: {ticker} @ {curr_price:.2f} < stop {stop_levels[ticker]:.2f}")
+
+        # Move stopped-out positions to SGOV
+        if stopped_out:
+            stopped_weight = sum(current_holdings.pop(ticker) for ticker in stopped_out)
+            del_stops = [stop_levels.pop(ticker, None) for ticker in stopped_out]  # noqa
+            current_holdings[config.CASH_TICKER] = current_holdings.get(config.CASH_TICKER, 0.0) + stopped_weight
+
+        # Calculate daily portfolio return using valuation price data
         prev_date = trading_dates[i - 1]
         portfolio_return = 0.0
 
         for ticker, weight in current_holdings.items():
             if ticker not in price_data.columns:
                 continue
-
             prev_price = price_data.loc[prev_date, ticker]
             curr_price = price_data.loc[date, ticker]
-
             if pd.notna(prev_price) and pd.notna(curr_price) and prev_price != 0:
                 asset_return = (curr_price - prev_price) / prev_price
                 portfolio_return += weight * asset_return
 
-        # Update portfolio value
         portfolio_value.loc[date] = portfolio_value.loc[prev_date] * (1 + portfolio_return)
 
-    # Create results DataFrames
     strategy_df = pd.DataFrame({
         'date': portfolio_value.index,
         'portfolio_value': portfolio_value.values,

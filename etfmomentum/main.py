@@ -109,76 +109,20 @@ def run_backtest_mode(args):
     logger.info("="*70)
 
     try:
-        # Fetch price data
-        logger.info("\n[1/5] Fetching price data...")
-        all_tickers = list(etf_universe.keys()) + [config.BENCHMARK_TICKER]
-
-        # Add VIX if regime switching with VIX is enabled
-        if config.ENABLE_VOLATILITY_REGIME_SWITCHING and config.USE_VIX_FOR_REGIME:
-            all_tickers.append(config.VIX_TICKER)
-            logger.info(f"Volatility regime switching with VIX enabled - fetching {config.VIX_TICKER}")
-
-        price_data = get_price_data(
-            ticker_list=all_tickers,
-            start_date=config.DATA_START_DATE,
-            end_date=args.end_date,
-            api_key=config.FMP_API_KEY,
-            cache_path=str(config.PRICE_DATA_CACHE),
-            force_refresh=True,  # Always fetch fresh data (no caching)
-            api_delay=config.FMP_API_DELAY,
-        )
-
-        logger.info(f"Price data loaded: {price_data.shape[0]} days, {price_data.shape[1]} tickers")
-
-        # Generate signals
-        logger.info("\n[2/5] Generating signals...")
-        etf_tickers = list(etf_universe.keys())
-
-        signals = generate_signals(
-            price_data=price_data,
-            spy_ticker=config.BENCHMARK_TICKER,
-            etf_tickers=etf_tickers,
-            sma_window=config.SMA_LOOKBACK_DAYS,
-            roc_lookback=config.RS_ROC_LOOKBACK_DAYS,
-        )
-
-        # Create regime detector if enabled
-        regime_detector = None
-        if config.ENABLE_VOLATILITY_REGIME_SWITCHING:
-            logger.info("\nVolatility Regime Switching is ENABLED")
-            if config.USE_VIX_FOR_REGIME:
-                logger.info(f"  Method: VIX-based (ticker: {config.VIX_TICKER})")
-                logger.info(f"  VIX Smoothing: {config.VIX_SMOOTHING_DAYS} days")
-                logger.info(f"  VIX Low Threshold: {config.VIX_LOW_THRESHOLD:.0f}")
-                logger.info(f"  VIX High Enter: {config.VIX_HIGH_ENTER_THRESHOLD:.0f}")
-                logger.info(f"  VIX High Exit: {config.VIX_HIGH_EXIT_THRESHOLD:.0f} (hysteresis)")
-            else:
-                logger.info(f"  Method: SPY volatility calculation")
-                logger.info(f"  Low Vol Threshold: {config.LOW_VOL_THRESHOLD:.1%}")
-                logger.info(f"  High Vol Threshold: {config.HIGH_VOL_THRESHOLD:.1%}")
-            logger.info(f"  Low Vol Top N: {config.LOW_VOL_TOP_N}")
-            logger.info(f"  Medium Vol Top N: {config.MEDIUM_VOL_TOP_N}")
-            logger.info(f"  High Vol Top N: {config.HIGH_VOL_TOP_N}")
-            logger.info(f"  High Vol Min SPY: {config.HIGH_VOL_SPY_MIN_ALLOCATION:.0%}")
-            regime_detector = create_regime_detector(config)
-
-        # Run backtest
-        logger.info("\n[3/5] Running backtest...")
+        # Run backtest — signals and price data are fetched internally
+        logger.info("\n[1/3] Running backtest...")
         logger.info(f"Rebalance Frequency: {config.REBALANCE_FREQUENCY}")
         strategy_values, benchmark_values, rebalance_log = run_backtest(
-            signals=signals,
-            price_data=price_data,
-            spy_ticker=config.BENCHMARK_TICKER,
+            universe=args.universe,
             start_date=args.start_date,
             end_date=args.end_date,
             initial_capital=args.initial_capital,
             top_n=args.top_n,
-            regime_detector=regime_detector,
             rebalance_frequency=config.REBALANCE_FREQUENCY,
         )
 
         # Calculate metrics
-        logger.info("\n[4/5] Calculating performance metrics...")
+        logger.info("\n[2/3] Calculating performance metrics...")
         strategy_metrics = calculate_metrics(
             portfolio_values=strategy_values['portfolio_value'],
             initial_capital=args.initial_capital,
@@ -192,7 +136,7 @@ def run_backtest_mode(args):
         )
 
         # Generate and display reports
-        logger.info("\n[5/5] Generating reports...")
+        logger.info("\n[3/3] Generating reports...")
 
         perf_summary = generate_performance_summary(
             strategy_metrics=strategy_metrics,
@@ -216,13 +160,6 @@ def run_backtest_mode(args):
             rebalance_log=rebalance_log,
             output_dir=universe_output_dir,
             top_n=args.top_n,
-        )
-
-        rebalance_dates = get_rebalance_dates(price_data, args.start_date, args.end_date)
-        generate_signal_status_report(
-            signals=signals,
-            rebalance_dates=rebalance_dates,
-            output_dir=universe_output_dir,
         )
 
         # Print to console

@@ -30,6 +30,9 @@ FMP_HISTORICAL_PRICE_ENDPOINT = "https://financialmodelingprep.com/stable/histor
 # Benchmark
 BENCHMARK_TICKER = "SPY"
 
+# Cash equivalent ETF (short-term treasuries)
+CASH_TICKER = "SGOV"
+
 # ETF Universe - Loaded dynamically from external CSV files
 # Files location: PROJECT_ROOT/etflist/
 # Available universes: emerging, developed, sp500
@@ -46,6 +49,7 @@ REBALANCE_FREQUENCY = "weekly"  # Options: "weekly" (best: 378% return, 0.700 Sh
 SMA_LOOKBACK_DAYS = 210  # 10 months (optimized: was 200)
 RS_ROC_LOOKBACK_DAYS = 63  # 3 months (optimized: was 21 for 1 month)
 RISK_FREE_RATE = 0.045  # 4.5% annual risk-free rate for Sharpe calculation
+STOP_LOSS_THRESHOLD = 0.95  # Stop order at 95% of entry price (5% stop loss)
 
 # Volatility Regime Switching
 ENABLE_VOLATILITY_REGIME_SWITCHING = True  # Toggle feature on/off
