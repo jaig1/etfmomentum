@@ -19,7 +19,7 @@ CLI:
     etfmomentum backtest --universe sp500
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from .signal_generator import run_signals
 

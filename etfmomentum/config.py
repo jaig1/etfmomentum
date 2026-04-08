@@ -41,7 +41,7 @@ CASH_TICKER = "SGOV"
 # Backtest Parameters
 BACKTEST_START_DATE = "2016-01-01"
 BACKTEST_END_DATE = "2026-03-01"
-DATA_START_DATE = "2015-01-01"  # Need historical data for SMA calculation
+DATA_START_DATE = "2006-01-01"  # Need historical data for SMA calculation (2006 for 19-year backtest)
 INITIAL_CAPITAL = 100000.0
 
 # Strategy Parameters
