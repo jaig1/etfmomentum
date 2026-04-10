@@ -88,6 +88,7 @@ EXTREME_VOL_THRESHOLD = 0.35  # 35% annualized volatility for extreme regime
 ENABLE_BREADTH_FILTER = True
 BREADTH_FILTER_THRESHOLD = 0.40   # < 40% of sector ETFs above SMA = low breadth
 BREADTH_TOP_N_OVERRIDE = 1        # Reduce to 1 holding when breadth is low
+BREADTH_CASH_ALLOCATION = 0.5     # Cash (SGOV) allocation when breadth triggers: 0.0=none, 0.5=50%, 1.0=100%
 
 # API Settings
 FMP_API_DELAY = 0  # No delay needed (3000 calls/min plan)
