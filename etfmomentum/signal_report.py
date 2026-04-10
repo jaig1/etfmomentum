@@ -34,6 +34,7 @@ def generate_signal_report(
             'Rank': etf['rank'],
             'ETF': etf['ticker'],
             'Country/Region': etf_universe.get(etf['ticker'], 'Unknown'),
+            'Mom. Quality': f"{etf['momentum_quality']:.2f}",
             'RS ROC (%)': f"{etf['rs_roc'] * 100:.2f}",
             'Allocation (%)': f"{etf['weight'] * 100:.0f}",
         })
@@ -80,13 +81,13 @@ def generate_detailed_status_report(
 
     # Reorder and format columns
     df = status[['ticker', 'country', 'price', 'price_sma', 'rs_ratio', 'rs_sma',
-                 'rs_filter', 'abs_filter', 'rs_roc', 'rank']].copy()
+                 'rs_filter', 'abs_filter', 'momentum_quality', 'rs_roc', 'rank']].copy()
 
     df.columns = ['Ticker', 'Country/Region', 'Price', 'Price SMA', 'RS Ratio',
-                  'RS SMA', 'RS Filter', 'Abs Filter', 'RS ROC', 'Rank']
+                  'RS SMA', 'RS Filter', 'Abs Filter', 'Mom. Quality', 'RS ROC', 'Rank']
 
     # Format numeric columns
-    for col in ['Price', 'Price SMA', 'RS Ratio', 'RS SMA', 'RS ROC']:
+    for col in ['Price', 'Price SMA', 'RS Ratio', 'RS SMA', 'Mom. Quality', 'RS ROC']:
         df[col] = df[col].round(4)
 
     # Format filters as PASS/FAIL

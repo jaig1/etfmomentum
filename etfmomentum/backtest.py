@@ -96,11 +96,11 @@ def select_defensive_portfolio(
                     row = ticker_signals.loc[date]
                     defensive_rs.append({
                         'ticker': ticker,
-                        'rs_roc': row.get('rs_roc', 0),
+                        'momentum_quality': row.get('momentum_quality', 0),
                     })
 
-        # Sort by RS ROC
-        defensive_rs = sorted(defensive_rs, key=lambda x: x['rs_roc'], reverse=True)
+        # Sort by momentum quality (risk-adjusted momentum)
+        defensive_rs = sorted(defensive_rs, key=lambda x: x['momentum_quality'], reverse=True)
 
         # Select top N
         selected_n = min(top_n, len(defensive_rs))

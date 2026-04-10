@@ -83,6 +83,28 @@ def calculate_rs_roc(rs_ratio: pd.Series, lookback: int) -> pd.Series:
     return (rs_ratio - rs_ratio_lagged) / rs_ratio_lagged
 
 
+def calculate_momentum_quality(rs_ratio: pd.Series, lookback: int) -> pd.Series:
+    """
+    Calculate Risk-Adjusted Momentum (Information Ratio of the RS trend).
+
+    momentum_quality = RS_ROC(lookback) / StdDev(daily RS ratio returns, lookback)
+
+    Penalizes erratic movers and rewards smooth, persistent trends.
+    A sector that gaps up once scores lower than one that trends up steadily.
+
+    Args:
+        rs_ratio: RS ratio series (ETF / SPY)
+        lookback: Lookback period in days (same window for ROC and std)
+
+    Returns:
+        Series of risk-adjusted momentum values
+    """
+    rs_roc = calculate_rs_roc(rs_ratio, lookback)
+    daily_rs_returns = rs_ratio.pct_change()
+    rs_std = daily_rs_returns.rolling(window=lookback, min_periods=lookback).std()
+    return rs_roc / rs_std
+
+
 def generate_signals(
     price_data: pd.DataFrame,
     spy_ticker: str,
@@ -141,8 +163,9 @@ def generate_signals(
         abs_filter = apply_absolute_filter(etf_prices, price_sma)
         both_filters = rs_filter & abs_filter
 
-        # Calculate RS ROC
+        # Calculate RS ROC and risk-adjusted momentum
         rs_roc = calculate_rs_roc(rs_ratio, roc_lookback)
+        momentum_quality = calculate_momentum_quality(rs_ratio, roc_lookback)
 
         # Combine into DataFrame
         df = pd.DataFrame({
@@ -154,6 +177,7 @@ def generate_signals(
             'abs_filter': abs_filter,
             'both_filters': both_filters,
             'rs_roc': rs_roc,
+            'momentum_quality': momentum_quality,
         })
 
         signals[ticker] = df
@@ -186,7 +210,7 @@ def get_qualifying_etfs(
         row = df.loc[date]
 
         # Check if both filters pass
-        if row['both_filters'] and not pd.isna(row['rs_roc']):
+        if row['both_filters'] and not pd.isna(row['momentum_quality']):
             qualifying.append({
                 'ticker': ticker,
                 'price': row['price'],
@@ -196,14 +220,15 @@ def get_qualifying_etfs(
                 'rs_filter': row['rs_filter'],
                 'abs_filter': row['abs_filter'],
                 'rs_roc': row['rs_roc'],
+                'momentum_quality': row['momentum_quality'],
             })
 
     if not qualifying:
         return pd.DataFrame()
 
-    # Create DataFrame and sort by RS ROC descending
+    # Create DataFrame and sort by momentum quality descending (smooth trends first)
     df_qualifying = pd.DataFrame(qualifying)
-    df_qualifying = df_qualifying.sort_values('rs_roc', ascending=False).reset_index(drop=True)
+    df_qualifying = df_qualifying.sort_values('momentum_quality', ascending=False).reset_index(drop=True)
     df_qualifying['rank'] = range(1, len(df_qualifying) + 1)
 
     return df_qualifying
@@ -236,6 +261,7 @@ def get_all_etf_status(
                 'rs_filter': False,
                 'abs_filter': False,
                 'rs_roc': np.nan,
+                'momentum_quality': np.nan,
                 'rank': np.nan,
             })
             continue
@@ -251,15 +277,16 @@ def get_all_etf_status(
             'rs_filter': row['rs_filter'],
             'abs_filter': row['abs_filter'],
             'rs_roc': row['rs_roc'],
+            'momentum_quality': row['momentum_quality'],
             'rank': np.nan,  # Will be filled for qualifying ETFs
         })
 
     df_status = pd.DataFrame(status_list)
 
     # Calculate ranks for qualifying ETFs
-    qualifying = df_status[(df_status['rs_filter']) & (df_status['abs_filter']) & (~df_status['rs_roc'].isna())]
+    qualifying = df_status[(df_status['rs_filter']) & (df_status['abs_filter']) & (~df_status['momentum_quality'].isna())]
     if not qualifying.empty:
-        qualifying_sorted = qualifying.sort_values('rs_roc', ascending=False)
+        qualifying_sorted = qualifying.sort_values('momentum_quality', ascending=False)
         ranks = {ticker: rank for rank, ticker in enumerate(qualifying_sorted['ticker'], 1)}
         df_status['rank'] = df_status['ticker'].map(ranks)
 

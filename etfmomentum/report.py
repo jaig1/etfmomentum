@@ -326,11 +326,11 @@ def generate_signal_status_report(
     # Reorder columns
     df_combined = df_combined[[
         'date', 'ticker', 'price', 'price_sma', 'rs_ratio', 'rs_sma',
-        'rs_filter', 'abs_filter', 'rs_roc', 'rank'
+        'rs_filter', 'abs_filter', 'momentum_quality', 'rs_roc', 'rank'
     ]]
 
     # Round numeric columns
-    numeric_cols = ['price', 'price_sma', 'rs_ratio', 'rs_sma', 'rs_roc']
+    numeric_cols = ['price', 'price_sma', 'rs_ratio', 'rs_sma', 'momentum_quality', 'rs_roc']
     for col in numeric_cols:
         df_combined[col] = df_combined[col].round(4)
 

@@ -122,6 +122,7 @@ def select_current_portfolio(
                 'ticker': ticker,
                 'rank': int(row['rank']),
                 'rs_roc': row['rs_roc'],
+                'momentum_quality': row['momentum_quality'],
                 'rs_ratio': row['rs_ratio'],
                 'weight': weight,
             })
@@ -139,6 +140,7 @@ def select_current_portfolio(
                 'ticker': ticker,
                 'rank': int(row['rank']),
                 'rs_roc': row['rs_roc'],
+                'momentum_quality': row['momentum_quality'],
                 'rs_ratio': row['rs_ratio'],
                 'weight': weight,
             })
