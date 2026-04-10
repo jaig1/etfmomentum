@@ -82,6 +82,13 @@ HIGH_VOL_TBILL_ETF = 'BIL'  # Short-term Treasury ETF (SGOV also works)
 HIGH_VOL_TBILL_ALLOCATION = 0.50  # 50% allocation in hybrid mode
 EXTREME_VOL_THRESHOLD = 0.35  # 35% annualized volatility for extreme regime
 
+# Breadth Filter (Master Switch)
+# Uses % of sector ETFs above their SMA as a leading defensive indicator.
+# When breadth is low (broad participation collapsing), reduce concentration.
+ENABLE_BREADTH_FILTER = True
+BREADTH_FILTER_THRESHOLD = 0.40   # < 40% of sector ETFs above SMA = low breadth
+BREADTH_TOP_N_OVERRIDE = 1        # Reduce to 1 holding when breadth is low
+
 # API Settings
 FMP_API_DELAY = 0  # No delay needed (3000 calls/min plan)
 

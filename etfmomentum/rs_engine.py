@@ -105,6 +105,46 @@ def calculate_momentum_quality(rs_ratio: pd.Series, lookback: int) -> pd.Series:
     return rs_roc / rs_std
 
 
+def calculate_sector_breadth(
+    price_data: pd.DataFrame,
+    etf_tickers: List[str],
+    sma_window: int,
+) -> float:
+    """
+    Calculate sector breadth: fraction of ETFs above their SMA.
+
+    Used as a leading defensive indicator. When broad market participation
+    is collapsing (few sectors above their long-term trend), concentration
+    risk increases significantly.
+
+    Args:
+        price_data: Price DataFrame already sliced to the evaluation date
+        etf_tickers: Sector ETF tickers to include (exclude SPY, SGOV, BIL)
+        sma_window: SMA lookback window in days (matches strategy SMA)
+
+    Returns:
+        Fraction of ETFs above their SMA (0.0 to 1.0).
+        Returns 1.0 (no filter) when insufficient data is available.
+    """
+    above = 0
+    total = 0
+
+    for ticker in etf_tickers:
+        if ticker not in price_data.columns:
+            continue
+        prices = price_data[ticker].dropna()
+        if len(prices) < sma_window:
+            continue
+        sma = prices.rolling(window=sma_window, min_periods=sma_window).mean().iloc[-1]
+        current = prices.iloc[-1]
+        if pd.notna(sma) and pd.notna(current):
+            total += 1
+            if current > sma:
+                above += 1
+
+    return above / total if total > 0 else 1.0
+
+
 def generate_signals(
     price_data: pd.DataFrame,
     spy_ticker: str,

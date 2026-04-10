@@ -7,6 +7,7 @@ from datetime import datetime
 import logging
 
 from .signal_generator import _run_signals_with_data
+from .rs_engine import calculate_sector_breadth
 
 logger = logging.getLogger(__name__)
 
@@ -272,7 +273,16 @@ def run_backtest(
     for i, date in enumerate(trading_dates):
         # On rebalance dates, delegate to signals module for ticker selection
         if date >= next_rebalance_date:
-            selected_tickers = _run_signals_with_data(universe=universe, price_data=price_data, date=date, top_n=top_n)
+            # Breadth filter: reduce concentration when broad participation is collapsing
+            effective_top_n = top_n
+            if config.ENABLE_BREADTH_FILTER:
+                price_slice = price_data[price_data.index <= date]
+                breadth = calculate_sector_breadth(price_slice, list(etf_universe.keys()), config.SMA_LOOKBACK_DAYS)
+                if breadth < config.BREADTH_FILTER_THRESHOLD:
+                    effective_top_n = config.BREADTH_TOP_N_OVERRIDE
+                    logger.info(f"Breadth filter triggered on {date.date()}: {breadth:.1%} of sectors above SMA → top_n reduced to {effective_top_n}")
+
+            selected_tickers = _run_signals_with_data(universe=universe, price_data=price_data, date=date, top_n=effective_top_n)
             weight = 1.0 / len(selected_tickers)
             new_holdings = {ticker: weight for ticker in selected_tickers}
 
