@@ -1,6 +1,6 @@
 # ETF Momentum Strategy — Comprehensive Overview
 
-*Last updated: April 10, 2026 | Version: 0.2.0*
+*Last updated: April 10, 2026 | Version: 0.3.0*
 
 ---
 
@@ -27,7 +27,8 @@ The core insight is that sector performance trends. Energy leads for multi-year 
 **What makes it different from simple sector picking:**
 - Signals are rules-based and systematic, not discretionary
 - Both *relative* strength (vs SPY) and *absolute* trend are required to enter a position
-- Three independent defensive layers protect capital during drawdowns
+- Momentum quality — not just magnitude — determines ranking (smooth trends beat one-day gaps)
+- Four independent defensive layers protect capital during drawdowns
 - The universe is narrow (12 ETFs) and sector-level, keeping transaction costs and complexity low
 
 ---
@@ -48,9 +49,15 @@ At each rebalance date the strategy calculates two filters for every ETF in the 
 - This prevents buying into downtrending sectors regardless of relative strength
 - Sectors in absolute downtrends are excluded even if they're "the best of a bad bunch"
 
+**Ranking — Momentum Quality (Risk-Adjusted Momentum)**
+- ETFs passing both filters are ranked by *Momentum Quality*, not raw ROC
+- Formula: `RS_ROC(63) / StdDev(daily RS ratio returns, 63 days)`
+- This is the Information Ratio of the relative strength trend: how much outperformance per unit of volatility
+- A sector that gaps up 20% in one day scores lower than one that trends up steadily over 3 months
+- Smooth, persistent trends are historically more likely to continue; erratic movers suffer more momentum crashes
+
 **Portfolio Construction**
-- ETFs that pass both filters are ranked by their RS ROC (descending)
-- Top 3 are selected for equal-weight allocation
+- Top 3 by Momentum Quality are selected for equal-weight allocation
 - If fewer than 3 ETFs pass both filters, remaining slots go to SGOV (cash equivalent)
 
 ### Rebalancing
@@ -271,26 +278,103 @@ The Sharpe ratio improvement from 0.376 to 0.929 is the most dramatic change in 
 
 ---
 
+### Phase 7 — Momentum Quality Ranking (April 10, 2026)
+
+**What was done:** Replaced raw RS ROC as the ranking signal with risk-adjusted momentum (Momentum Quality).
+
+**Problem with raw ROC:** Rate of Change measures distance traveled, not journey quality. A sector that crashes 30% then bounces 35% in a single week has high ROC but "low quality" momentum. These erratic movers are historically prone to momentum crashes and reversals.
+
+**The fix:** Divide RS_ROC(63) by the rolling standard deviation of daily RS ratio returns over the same 63-day window. This is the Information Ratio of the trend — it penalises noisy, erratic movers and prioritises sectors with smooth, persistent relative strength.
+
+**Impact (vs prior baseline):**
+
+| Metric | Before | After | Delta |
+|---|---|---|---|
+| 10yr Return | 857% | 862% | +5pp |
+| 10yr Sharpe | 1.248 | 1.271 | +0.023 |
+| 10yr MaxDD | -13.6% | -13.6% | flat |
+| 19yr Return | 2,831% | 2,909% | +78pp |
+| 19yr Sharpe | 0.973 | 0.997 | +0.024 |
+| Walk-forward OOS | 504% / 4 of 6 windows | 576% / 5 of 6 windows | +72pp |
+
+No deterioration on any metric. Sharpe improved across all periods.
+
+---
+
+### Phase 8 — Sector Breadth Filter (April 10, 2026)
+
+**What was done:** Added a market breadth "master switch" that fires before the momentum ranking when broad sector participation is collapsing.
+
+**Rationale:** SPY volatility (the existing regime signal) is a lagging indicator — it spikes *after* damage has occurred. Market breadth tends to deteriorate in advance. When fewer sectors are in uptrends, the environment is structurally hostile to concentrated momentum longs regardless of individual sector signals.
+
+**Implementation:** At each rebalance, the strategy counts how many of the 11 sector ETFs have their current price above their 210-day SMA. If fewer than 40% do (i.e., < 5 of 11 sectors in uptrends), the breadth filter triggers.
+
+**Three defensive actions were tested:**
+
+| Action | 19yr Return | 19yr Sharpe | 19yr MaxDD |
+|---|---|---|---|
+| 100% top-1 sector | 3,605% | 1.009 | -19.1% |
+| **50% SGOV + 50% top-1** | **2,955%** | **1.025** | **-12.7%** |
+| 100% SGOV | 2,352% | 0.972 | -12.8% |
+
+The 50% SGOV variant was selected: best Sharpe (1.025), tightest MaxDD (-12.7%), and still meaningfully outperforms the no-breadth baseline.
+
+**Historical trigger periods (19-year backtest):**
+
+| Period | Breadth Reading | Context |
+|---|---|---|
+| Jan–Mar 2008 | 0–30% | Pre-Lehman deterioration |
+| Jul–Sep 2008 | 0–20% | Lehman collapse |
+| Jan 2016 | 10% | China / oil selloff |
+| Oct–Dec 2018 | 0–37% | Fed tightening crash |
+| Mar–Apr 2020 | 0–8% | COVID crash |
+
+**Impact vs Phase 7 baseline:**
+
+| Metric | Before | After | Delta |
+|---|---|---|---|
+| 10yr Return | 862% | 901% | +39pp |
+| 10yr Sharpe | 1.271 | 1.316 | +0.045 |
+| 10yr MaxDD | -13.6% | **-11.8%** | +1.8pp tighter |
+| 19yr Return | 2,909% | 2,955% | +46pp |
+| 19yr Sharpe | 0.997 | **1.025** | +0.028 |
+| 19yr MaxDD | -14.0% | **-12.7%** | +1.3pp tighter |
+
+MaxDD improved on both periods — the breadth filter is reducing drawdowns while simultaneously improving returns.
+
+---
+
 ## 4. Defensive Layers
 
-Three mechanisms provide capital protection, operating at different timescales and triggers:
+Four mechanisms provide capital protection, operating at different timescales and triggers:
 
 ```
 Rebalance Signal
      │
-     ├── [1] Volatility Regime Check
+     ├── [1] Breadth Filter (Master Switch)
+     │         < 40% of sector ETFs above SMA → 50% SGOV + 50% top-1 sector
+     │         Leading indicator: fires before volatility spikes
+     │
+     ├── [2] Volatility Regime Check
      │         Adjust N holdings and SPY floor based on current market vol
      │
-     ├── [2] SGOV Momentum Check
+     ├── [3] SGOV Momentum Check
      │         Replace any ETF where ROC < SGOV ROC with cash equivalent
      │
-     └── Portfolio Set for Month
+     └── Portfolio Set for Period
                │
                └── Daily Price Check
-                         [3] Stop-Loss: exit any position down 5% from entry → SGOV
+                         [4] Stop-Loss: exit any position down 5% from entry → SGOV
 ```
 
-These three layers are additive and independent. The portfolio can simultaneously be in "high vol mode" (from layer 1), have one position replaced by SGOV (layer 2), and trigger an intraday stop-loss on another position (layer 3).
+These four layers are additive and independent. Layer 1 (breadth) acts as a pre-filter before the momentum signal even runs. Layers 2 and 3 operate on the momentum-selected portfolio. Layer 4 provides intraperiod risk control between rebalances.
+
+| Layer | Timing | Trigger | Action |
+|---|---|---|---|
+| [1] Breadth Filter | Rebalance | < 40% sectors above SMA | 50% SGOV + 50% top-1 sector |
+| [2] Volatility Regime | Rebalance | SPY vol level | Adjust N holdings + SPY floor |
+| [3] SGOV Momentum | Rebalance | ETF ROC < SGOV ROC | Replace position with SGOV |
+| [4] Stop-Loss | Daily | Price -5% from entry | Exit position → SGOV |
 
 ---
 
@@ -341,36 +425,54 @@ Three universes were tested with the optimized parameters:
 
 ## 7. Current Performance
 
-### Optimized Parameters (v0.2.0)
+### Current Parameters (v0.3.0)
 
 ```python
 TOP_N_HOLDINGS = 3
-SMA_LOOKBACK_DAYS = 210       # 10 months
-RS_ROC_LOOKBACK_DAYS = 63     # 3 months
-REBALANCE_FREQUENCY = "monthly"
+SMA_LOOKBACK_DAYS = 210            # 10 months
+RS_ROC_LOOKBACK_DAYS = 63          # 3 months
+REBALANCE_FREQUENCY = "weekly"
 CASH_TICKER = "SGOV"
-STOP_LOSS_THRESHOLD = 0.95    # 5% stop
-ENABLE_VOLATILITY_REGIME_SWITCHING = True  # (optional, used with weekly)
+STOP_LOSS_THRESHOLD = 0.95         # 5% stop
+ENABLE_VOLATILITY_REGIME_SWITCHING = True
+ENABLE_BREADTH_FILTER = True
+BREADTH_FILTER_THRESHOLD = 0.40    # < 40% of sectors above SMA = low breadth
+BREADTH_CASH_ALLOCATION = 0.5      # 50% SGOV + 50% top-1 when breadth triggers
 ```
 
-### 10-Year Summary (2016–2026, 11 sectors)
-
-| | Baseline | Optimized | Improvement |
-|---|---|---|---|
-| Return | 270.81% | 341.37% | +70.56 pp |
-| Sharpe | 0.574 | 0.656 | +14.2% |
-| Final Value | $374k | $441k | +$66k |
-| Rank (of 48) | 24 | 1 | — |
-
-### 19-Year Summary (2007–2026, 12 sectors incl. SMH)
+### 10-Year Summary (2016–2026-04-08)
 
 | Metric | Strategy | SPY |
 |---|---|---|
-| Total Return | 4,745% | 366% |
-| Annualized | 22.36% | 8.34% |
-| Sharpe | 0.929 | 0.277 |
-| Max Drawdown | -28.48% | -56.47% |
-| $100k → | $4.85M | $466k |
+| Total Return | **901%** | 236% |
+| Annualized Return | **25.24%** | 12.58% |
+| Sharpe Ratio | **1.316** | 0.499 |
+| Max Drawdown | **-11.8%** | -34.1% |
+| $100k → | **$1.00M** | $336k |
+| Months beating SPY | 79 / 123 | — |
+| Years beating SPY | 9 / 10 | — |
+
+### 19-Year Summary (2007–2026-04-08)
+
+| Metric | Strategy | SPY |
+|---|---|---|
+| Total Return | **2,955%** | 378% |
+| Annualized Return | **19.46%** | 8.48% |
+| Sharpe Ratio | **1.025** | 0.283 |
+| Max Drawdown | **-12.7%** | -56.47% |
+| $100k → | **$3.06M** | $478k |
+| Months beating SPY | 146 / 231 | — |
+| Years beating SPY | 15 / 19 | — |
+
+### Walk-Forward Validation (OOS, 6 windows, 2014–2026)
+
+| Metric | Result |
+|---|---|
+| Combined OOS Return | 576% |
+| Average OOS Sharpe | 0.891 |
+| Windows beating SPY | 5 / 6 |
+
+Walk-forward uses monthly rebalancing without vol regime switching, which structurally reduces OOS numbers relative to the weekly backtest. The 5/6 window beat rate and 576% OOS return confirm the signal generalises beyond the in-sample period.
 
 ### Current Signal (April 2026)
 
@@ -421,7 +523,7 @@ XLRE and XLC are gracefully skipped for pre-inception dates with warnings only.
 
 ### Backtest Limitations
 
-**Overfitting:** 48 combinations were tested on the same dataset. Walk-forward validation and out-of-sample testing have not been completed. The tight clustering of top results reduces (but does not eliminate) this concern.
+**Overfitting:** 48 combinations were tested on the same in-sample dataset. Walk-forward validation (6 windows, 576 backtests) was completed and shows 5/6 OOS windows beating SPY with a 576% combined OOS return, reducing but not eliminating this concern. The walk-forward consensus parameters (SMA=8mo, ROC=1mo, TopN=10) differ from the in-sample optimum — the current in-sample params have not been confirmed as the walk-forward optimal.
 
 **Survivorship bias:** The ETF universe was constructed with knowledge of which sectors exist today. Some ETFs did not exist at the start of the backtest period (XLC from 2018, XLRE from 2015).
 
