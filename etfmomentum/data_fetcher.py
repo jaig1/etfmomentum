@@ -97,7 +97,22 @@ def fetch_all_data(
     """
     all_data = {}
 
-    for i, ticker in enumerate(ticker_list):
+    # BIL (iShares 1-3 Month Treasury Bond ETF, launched Jan 2007) is fetched
+    # as a proxy for SGOV whenever the backtest period predates SGOV's inception
+    # (June 12, 2020). BIL is fetched alongside other tickers and used to
+    # backfill SGOV's missing pre-inception history after all data is combined.
+    SGOV_INCEPTION = pd.Timestamp("2020-06-12")
+    SGOV_PROXY = "BIL"
+    cash_ticker = config.CASH_TICKER  # "SGOV"
+
+    needs_proxy = (
+        cash_ticker in ticker_list
+        and pd.Timestamp(start_date) < SGOV_INCEPTION
+        and SGOV_PROXY not in ticker_list
+    )
+    fetch_list = list(ticker_list) + ([SGOV_PROXY] if needs_proxy else [])
+
+    for i, ticker in enumerate(fetch_list):
         df = fetch_historical_data(ticker, start_date, end_date, api_key)
 
         if not df.empty:
@@ -108,7 +123,7 @@ def fetch_all_data(
             logger.warning(f"Skipping {ticker} due to missing data")
 
         # Add delay to respect rate limits (except for last ticker)
-        if i < len(ticker_list) - 1:
+        if i < len(fetch_list) - 1:
             time.sleep(api_delay)
 
     if not all_data:
@@ -117,6 +132,21 @@ def fetch_all_data(
     # Combine all series into a single DataFrame
     combined_df = pd.DataFrame(all_data)
     combined_df.index.name = "date"
+
+    # Backfill SGOV pre-inception dates with BIL proxy
+    if needs_proxy and cash_ticker in combined_df.columns and SGOV_PROXY in combined_df.columns:
+        pre_inception_mask = combined_df.index < SGOV_INCEPTION
+        n_missing = combined_df.loc[pre_inception_mask, cash_ticker].isna().sum()
+        combined_df.loc[pre_inception_mask, cash_ticker] = (
+            combined_df.loc[pre_inception_mask, cash_ticker]
+            .fillna(combined_df.loc[pre_inception_mask, SGOV_PROXY])
+        )
+        logger.info(
+            f"SGOV proxy: backfilled {n_missing} pre-inception trading days "
+            f"({start_date} to {SGOV_INCEPTION.date()}) using {SGOV_PROXY}"
+        )
+        # Drop the proxy column — callers only expect the originally requested tickers
+        combined_df = combined_df.drop(columns=[SGOV_PROXY])
 
     # Sort by date
     combined_df = combined_df.sort_index()

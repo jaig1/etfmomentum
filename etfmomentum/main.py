@@ -69,6 +69,12 @@ def parse_arguments():
     backtest_parser.add_argument('--initial-capital', type=float, default=config.INITIAL_CAPITAL,
                                  help=f'Initial capital (default: {config.INITIAL_CAPITAL})')
 
+    # Walk-forward mode
+    wf_parser = subparsers.add_parser('walk-forward', help='Run walk-forward validation')
+    wf_parser.add_argument('--universe', type=str, default='sp500',
+                           choices=['emerging', 'developed', 'sp500'],
+                           help='ETF universe to use (default: sp500)')
+
     # Signal mode
     signal_parser = subparsers.add_parser('signal', help='Generate current month signals')
     signal_parser.add_argument('--universe', type=str, default='emerging',
@@ -275,6 +281,9 @@ def main():
         run_backtest_mode(args)
     elif args.mode == 'signal':
         run_signal_mode(args)
+    elif args.mode == 'walk-forward':
+        from .walk_forward import run_walk_forward
+        run_walk_forward(universe=args.universe)
     else:
         logger.error("Please specify a mode: 'backtest' or 'signal'")
         logger.info("Examples:")
