@@ -105,6 +105,77 @@ def calculate_momentum_quality(rs_ratio: pd.Series, lookback: int) -> pd.Series:
     return rs_roc / rs_std
 
 
+def apply_correlation_filter(
+    qualifying_etfs: pd.DataFrame,
+    price_data: pd.DataFrame,
+    top_n: int,
+    lookback: int,
+    threshold: float,
+) -> pd.DataFrame:
+    """
+    Greedy correlation-filtered selection from a ranked qualifying list.
+
+    Iterates through ETFs in momentum-quality rank order. Takes the top-ranked
+    unconditionally. Skips any subsequent candidate whose rolling daily-return
+    correlation exceeds the threshold with *any* already-selected ETF.
+
+    Prevents hidden concentration (e.g. SMH + XLK both in top-3 when they are
+    driven by the same mega-cap tech factor).
+
+    Args:
+        qualifying_etfs: DataFrame ranked by momentum_quality (descending)
+        price_data: Price DataFrame sliced to the evaluation date (no lookahead)
+        top_n: Maximum number of ETFs to select
+        lookback: Rolling window in days for correlation calculation
+        threshold: Correlation threshold above which a candidate is skipped
+
+    Returns:
+        Filtered DataFrame with at most top_n rows, index reset.
+    """
+    selected_rows = []
+    selected_tickers = []
+
+    for _, row in qualifying_etfs.iterrows():
+        if len(selected_rows) >= top_n:
+            break
+
+        ticker = row['ticker']
+
+        if not selected_tickers:
+            # Always take the top-ranked ETF unconditionally
+            selected_rows.append(row)
+            selected_tickers.append(ticker)
+            continue
+
+        if ticker not in price_data.columns:
+            continue
+
+        candidate_returns = price_data[ticker].pct_change().dropna().tail(lookback)
+
+        too_correlated = False
+        for held_ticker in selected_tickers:
+            if held_ticker not in price_data.columns:
+                continue
+            held_returns = price_data[held_ticker].pct_change().dropna().tail(lookback)
+            aligned = pd.concat([candidate_returns, held_returns], axis=1).dropna()
+            if len(aligned) < lookback // 2:
+                continue
+            corr = aligned.iloc[:, 0].corr(aligned.iloc[:, 1])
+            if not pd.isna(corr) and corr > threshold:
+                logger.debug(f"Correlation filter: skipping {ticker} (corr={corr:.2f} with {held_ticker})")
+                too_correlated = True
+                break
+
+        if not too_correlated:
+            selected_rows.append(row)
+            selected_tickers.append(ticker)
+
+    if not selected_rows:
+        return pd.DataFrame()
+
+    return pd.DataFrame(selected_rows).reset_index(drop=True)
+
+
 def calculate_sector_breadth(
     price_data: pd.DataFrame,
     etf_tickers: List[str],

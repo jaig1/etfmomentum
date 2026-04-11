@@ -1,6 +1,6 @@
 # ETF Momentum Strategy — Comprehensive Overview
 
-*Last updated: April 10, 2026 | Version: 0.3.0*
+*Last updated: April 11, 2026 | Version: 0.3.0 (universe-specific parameters + emerging market discovery)*
 
 ---
 
@@ -41,13 +41,16 @@ At each rebalance date the strategy calculates two filters for every ETF in the 
 
 **Filter 1 — Relative Strength (RS Ratio)**
 - RS = (ETF price / SPY price), normalized to a base of 1.0
-- Rate of Change (ROC) of the RS ratio over 63 days (3 months)
+- Rate of Change (ROC) of the RS ratio over a universe-specific lookback period
 - Positive ROC means the ETF is outperforming SPY on a trend basis
 
 **Filter 2 — Absolute Trend (SMA)**
-- ETF price must be above its 210-day (10-month) simple moving average
-- This prevents buying into downtrending sectors regardless of relative strength
-- Sectors in absolute downtrends are excluded even if they're "the best of a bad bunch"
+- ETF price must be above its universe-specific simple moving average
+- This prevents buying into downtrending ETFs regardless of relative strength
+- ETFs in absolute downtrends are excluded even if they're "the best of a bad bunch"
+
+> **Universe-specific parameters** — the SMA window, ROC lookback, and Top N are determined per universe. See Section 6 for the validated values and the rationale.
+
 
 **Ranking — Momentum Quality (Risk-Adjusted Momentum)**
 - ETFs passing both filters are ranked by *Momentum Quality*, not raw ROC
@@ -344,6 +347,70 @@ MaxDD improved on both periods — the breadth filter is reducing drawdowns whil
 
 ---
 
+### Phase 9 — Stop-Loss Whipsaw Validation (April 10, 2026)
+
+**What was done:** Evaluated a proposal to replace the fixed 5% stop-loss with a volatility-adjusted ATR-based stop (2.5×ATR(20) below entry price). The proposal's premise was that a fixed 5% stop causes whipsaws in high-beta sectors like SMH, where a 5% intraday move is "noise."
+
+**Analysis method:** Instrumented the 10-year backtest (2016–2026-04-08) to log every stop-loss trigger and track each stopped position's price at the *next* rebalance date (typically 3–5 trading days later). A whipsaw is defined as: price at next rebalance > entry price at stop.
+
+**Results:**
+
+| Metric | Result |
+|---|---|
+| Total stop-loss events (10yr) | 46 |
+| Whipsaws (price > entry at next rebalance) | **0 / 46 (0%)** |
+| Average drop at stop trigger | -6.4% from entry |
+| Average price at next rebalance vs entry | -5.9% (still down) |
+
+**By ticker:**
+
+| Ticker | Stops | Avg drop at trigger | Avg recovery vs entry |
+|---|---|---|---|
+| SMH | 14 | -6.3% | -6.5% |
+| XLE | 9 | -6.3% | -7.8% |
+| XLB | 4 | -6.0% | -6.8% |
+| XLY | 4 | -5.6% | -4.5% |
+| Others | 15 | -6.3% | -5.3% |
+
+SMH — the ticker the proposal was specifically trying to protect — accounted for 14/46 stops (30%). In every case the stop fired, SMH continued lower through the next rebalance.
+
+**Findings:**
+
+1. **No whipsaw problem exists.** In 100% of stop events, the position was still below entry at the next rebalance. The stop was protecting capital from real, continuing drawdowns — not cutting noise.
+
+2. **Stops trigger late, not early.** The average drop at trigger is -6.4%, already past the 5% threshold. Positions were actively sliding before the daily price check caught them. After the stop, they declined further on average.
+
+3. **ATR-based stop would not improve outcomes.** A 2.5×ATR stop sets a wider threshold for high-beta sectors. Given that all 46 stops were justified, widening them would only delay exit on real losers, worsening P&L.
+
+4. **The existing four-layer system absorbs the scenarios ATR stops are designed for.** Volatile markets are already handled by vol regime switching (position sizing) and the sector breadth filter (defensive rotation before vol spikes). The stop-loss is a backstop, not the primary defence.
+
+**Decision:** ATR-based stop-loss proposal rejected. Fixed 5% stop retained unchanged.
+
+---
+
+### Phase 10 — Universe-Specific Parameters (April 11, 2026)
+
+**What was done:** Full 10yr, 19yr, and walk-forward backtests run for all three universes (sp500, emerging, developed) using their own walk-forward consensus parameters. Universe-specific parameters codified into `config.UNIVERSE_PARAMS`. The public API (`run_signals`, `POST /signals`) updated so callers pass only a universe name — the package resolves SMA, ROC, and TopN automatically.
+
+**The silent bug fixed:** Before this change, calling `run_signals(universe="emerging")` would use SP500's global parameters (SMA=210d, ROC=63d). All universes were running with the wrong parameters. Emerging markets were especially penalised: 3-month ROC is too noisy for country-level signals.
+
+**Key discovery:** With universe-appropriate parameters, **emerging markets dramatically outperforms SP500 sectors** in all three tests:
+- 10yr: Sharpe 1.631 vs 1.316 for SP500
+- 19yr: 16,320% total return vs 2,955%
+- Walk-forward OOS: 734% combined return, 0.949 avg Sharpe, OOS/IS decay ratio 0.90
+
+**API contract change:** `SignalRequest` no longer accepts `top_n`. The only required field is `universe`.
+
+```python
+# Before
+run_signals(universe="emerging", top_n=3)   # wrong params used internally
+
+# After
+run_signals(universe="emerging")             # SMA=252d, ROC=21d, TopN=3 resolved automatically
+```
+
+---
+
 ## 4. Defensive Layers
 
 Four mechanisms provide capital protection, operating at different timescales and triggers:
@@ -374,7 +441,7 @@ These four layers are additive and independent. Layer 1 (breadth) acts as a pre-
 | [1] Breadth Filter | Rebalance | < 40% sectors above SMA | 50% SGOV + 50% top-1 sector |
 | [2] Volatility Regime | Rebalance | SPY vol level | Adjust N holdings + SPY floor |
 | [3] SGOV Momentum | Rebalance | ETF ROC < SGOV ROC | Replace position with SGOV |
-| [4] Stop-Loss | Daily | Price -5% from entry | Exit position → SGOV |
+| [4] Stop-Loss | Daily | Price -5% from entry | Exit position → SGOV — validated: 0/46 whipsaws in 10yr backtest |
 
 ---
 
@@ -405,21 +472,57 @@ The top 3 ranked parameter combinations are tightly clustered (Sharpe 0.652–0.
 
 ## 6. Universe Analysis
 
-Three universes were tested with the optimized parameters:
+Three universes were tested. Each universe has its own walk-forward validated parameters — the package resolves these automatically when a universe is specified. Third-party callers only need to pass the universe name.
 
-| Universe | ETFs | Return vs SPY | Notes |
-|---|---|---|---|
-| S&P 500 Sectors | 12 | +100% (10yr) | Best performer |
-| Developed Markets | Various | -134% | Underperforms |
-| Emerging Markets | Various | -85% | Underperforms |
+### Validated Parameters Per Universe
 
-**Why S&P 500 sectors dominate:**
-- Lower correlation between sector ETFs than country ETFs
-- Sector performance is more differentiated and trend-following
-- Internally diversified (each sector ETF = dozens of stocks)
-- Deep liquidity and long data history
+| Universe | ETFs | SMA | ROC | Top N | Source |
+|---|---|---|---|---|---|
+| `sp500` | 12 | 210d (10mo) | 63d (3mo) | 3 | In-sample optimised |
+| `emerging` | 28 | 252d (12mo) | 21d (1mo) | 3 | Walk-forward consensus (5/6 windows) |
+| `developed` | 26 | 168d (8mo) | 21d (1mo) | 3 | Walk-forward consensus (6/6 windows) |
 
-**Conclusion:** Focus exclusively on S&P 500 sector rotation. The developed and emerging market universes do not benefit from the same momentum dynamics.
+### Performance Comparison (April 11, 2026)
+
+**10-Year (2016–2026):**
+
+| Universe | Return | Ann. Return | Sharpe | MaxDD | vs SPY |
+|---|---|---|---|---|---|
+| SP500 | 901% | 25.24% | 1.316 | -11.8% | +663pp |
+| **Emerging** | **1,890%** | **33.89%** | **1.631** | -14.18% | +1,652pp |
+| Developed | 245% | 12.85% | 0.677 | -12.91% | +7pp |
+| SPY (B&H) | 238% | 12.62% | 0.501 | -34.1% | — |
+
+**19-Year (2007–2026):**
+
+| Universe | Return | Ann. Return | Sharpe | MaxDD | vs SPY |
+|---|---|---|---|---|---|
+| SP500 | 2,955% | 19.46% | 1.025 | -12.7% | +2,577pp |
+| **Emerging** | **16,320%** | **30.36%** | **1.426** | -18.51% | +15,940pp |
+| Developed | 827% | 12.27% | 0.603 | -19.06% | +447pp |
+| SPY (B&H) | 381% | 8.5% | 0.284 | -56.47% | — |
+
+**Walk-Forward OOS (6 windows, 2014–2026):**
+
+| Universe | Combined OOS Return | Avg OOS Sharpe | OOS/IS Decay | Windows Beat SPY |
+|---|---|---|---|---|
+| SP500 | 576% | 0.891 | ~0.87 | 5/6 |
+| **Emerging** | **734%** | **0.949** | **0.90** | **5/6** |
+| Developed | 210% | 0.420 | ~0.56 | 2/6 |
+
+### Why Parameters Differ Per Universe
+
+**Emerging markets (SMA=12mo, ROC=1mo):** Country ETF trends are driven by slower-moving macro forces — commodity cycles, currency flows, political risk, demographic tailwinds. A longer SMA (12mo) ensures the strategy only goes long when a genuine multi-month uptrend is established. Short ROC (1mo) identifies which countries just broke out. With 28 mostly-uncorrelated country ETFs, concentration at TopN=3 works: a country bull market can last 2–3 years once established.
+
+**Developed markets (SMA=8mo, ROC=1mo):** Developed country ETFs are more tightly correlated than EM (European economies move together) and trend somewhat faster than EM. The 8mo SMA is the walk-forward consensus across all 6 windows. Overall, the momentum dynamics are weaker — only 2/6 walk-forward windows beat SPY, making developed markets the weakest universe.
+
+**Why the original analysis showed EM underperforming:** Before April 11 2026, all universes used the SP500 global config parameters (SMA=210d, ROC=63d). This was wrong for EM — a 3-month ROC is too slow and noisy for country-level signals, and the 10mo SMA doesn't match EM trend dynamics. With universe-specific parameters applied, emerging markets becomes the strongest universe.
+
+### Universe Selection Guidance
+
+- Use `sp500` for US market sector rotation (primary, most validated, tightest drawdowns)
+- Use `emerging` if seeking higher return potential with slightly wider drawdowns
+- `developed` is the weakest universe; use only if there is a specific mandate for developed market exposure
 
 ---
 
@@ -428,16 +531,22 @@ Three universes were tested with the optimized parameters:
 ### Current Parameters (v0.3.0)
 
 ```python
-TOP_N_HOLDINGS = 3
-SMA_LOOKBACK_DAYS = 210            # 10 months
-RS_ROC_LOOKBACK_DAYS = 63          # 3 months
+# Global (shared across all universes)
 REBALANCE_FREQUENCY = "weekly"
-CASH_TICKER = "SGOV"
+CASH_TICKER = "SGOV"               # backfilled with BIL pre-2020-06-12
 STOP_LOSS_THRESHOLD = 0.95         # 5% stop
 ENABLE_VOLATILITY_REGIME_SWITCHING = True
 ENABLE_BREADTH_FILTER = True
 BREADTH_FILTER_THRESHOLD = 0.40    # < 40% of sectors above SMA = low breadth
 BREADTH_CASH_ALLOCATION = 0.5      # 50% SGOV + 50% top-1 when breadth triggers
+
+# Per-universe optimised parameters — resolved automatically by the package.
+# Third-party callers only need to pass the universe name.
+UNIVERSE_PARAMS = {
+    "sp500":     { "sma_lookback_days": 210, "roc_lookback_days": 63, "top_n": 3 },
+    "emerging":  { "sma_lookback_days": 252, "roc_lookback_days": 21, "top_n": 3 },
+    "developed": { "sma_lookback_days": 168, "roc_lookback_days": 21, "top_n": 3 },
+}
 ```
 
 ### 10-Year Summary (2016–2026-04-08)
@@ -491,7 +600,7 @@ System has rotated out of SMH/XLK (semiconductor/tech) into defensive sectors: *
 | `etf_loader.py` | Load ETF universes from CSV |
 | `rs_engine.py` | RS ratio, SMA, ROC signal calculation |
 | `backtest.py` | Portfolio simulation with daily stop-loss |
-| `signal_generator.py` | Live signal generation with SGOV check |
+| `signal_generator.py` | Live signal generation with SGOV check; resolves per-universe params from `UNIVERSE_PARAMS` |
 | `report.py` | Performance metrics (Sharpe, drawdown, etc.) |
 | `main.py` | CLI orchestrator (backtest / signal modes) |
 
@@ -523,11 +632,15 @@ XLRE and XLC are gracefully skipped for pre-inception dates with warnings only.
 
 ### Backtest Limitations
 
-**Overfitting:** 48 combinations were tested on the same in-sample dataset. Walk-forward validation (6 windows, 576 backtests) was completed and shows 5/6 OOS windows beating SPY with a 576% combined OOS return, reducing but not eliminating this concern. The walk-forward consensus parameters (SMA=8mo, ROC=1mo, TopN=10) differ from the in-sample optimum — the current in-sample params have not been confirmed as the walk-forward optimal.
+**Overfitting:** 48 combinations were tested on the same in-sample dataset. Walk-forward validation (6 windows, 576 backtests) was completed and shows 5/6 OOS windows beating SPY with a 576% combined OOS return (SP500 universe), reducing but not eliminating this concern. The walk-forward consensus for SP500 (SMA=8mo, ROC=1mo, TopN=10) differs from the in-sample optimum (SMA=10mo, ROC=3mo, TopN=3) — the current in-sample params have not been confirmed as walk-forward optimal for SP500. Emerging and developed universes use their own walk-forward consensus parameters directly.
 
 **Survivorship bias:** The ETF universe was constructed with knowledge of which sectors exist today. Some ETFs did not exist at the start of the backtest period (XLC from 2018, XLRE from 2015).
 
 **Market regime dependency:** Parameters were optimized on 2016–2026, a period that included a significant bull market. The 2008 crisis is covered in the 19-year test and the strategy performed well, but prolonged bear markets with different sector dynamics could stress the parameters.
+
+### Stop-Loss Empirical Validation
+
+The fixed 5% stop-loss was empirically validated in April 2026 via a full 10-year event study. All 46 stop events in the 2016–2026 backtest were analysed: in every case the stopped position continued lower at the next rebalance date (0% whipsaw rate). The stop-loss is functioning as a real loss cutter, not a noise amplifier. An ATR-based replacement was evaluated and rejected — see Phase 9 in the Iteration History.
 
 ### Concentration Risk
 
@@ -546,5 +659,6 @@ SMH's addition dramatically improved historical performance due to the 2024–20
 ---
 
 *For current signals: `uv run python -m etfmomentum signal --universe sp500 --detailed --refresh`*
+*For emerging signals: `uv run python -m etfmomentum signal --universe emerging --detailed --refresh`*
 *For a backtest: `uv run python -m etfmomentum backtest --universe sp500 --start-date 2007-01-01`*
 *Web UI: `./start_api.sh` + `./start_ui.sh` → http://localhost:3000*

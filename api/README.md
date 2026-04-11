@@ -52,10 +52,10 @@ Once the server is running, access the interactive API documentation:
 - `POST /api/signals` - Generate current portfolio signals with rebalancing recommendations
   ```json
   {
-    "universe": "sp500",
-    "top_n": 3
+    "universe": "sp500"
   }
   ```
+  Supported universes: `sp500`, `emerging`, `developed`. Parameters (SMA, ROC, Top N) are resolved automatically per universe — callers do not need to specify them.
 
 ### Backtest
 - `POST /api/backtest` - Run historical backtest
@@ -100,7 +100,7 @@ curl http://localhost:8000/api/dashboard?universe=sp500
 # Generate signals
 curl -X POST http://localhost:8000/api/signals \
   -H "Content-Type: application/json" \
-  -d '{"universe": "sp500", "top_n": 3}'
+  -d '{"universe": "sp500"}'
 
 # Run backtest
 curl -X POST http://localhost:8000/api/backtest \
@@ -128,7 +128,7 @@ print(response.json())
 # Generate signals
 response = requests.post(
     "http://localhost:8000/api/signals",
-    json={"universe": "sp500", "top_n": 3}
+    json={"universe": "sp500"}
 )
 print(response.json())
 ```

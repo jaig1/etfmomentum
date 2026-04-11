@@ -39,13 +39,17 @@ async def generate_current_signals(request: SignalRequest):
             api_delay=config.FMP_API_DELAY,
         )
 
+        # Resolve per-universe parameters — callers only specify the universe name
+        universe_params = config.UNIVERSE_PARAMS.get(request.universe, config.UNIVERSE_PARAMS["sp500"])
+        top_n = universe_params["top_n"]
+
         # Generate signals
         signals = generate_signals(
             price_data=price_data,
             spy_ticker=config.BENCHMARK_TICKER,
             etf_tickers=etf_tickers,
-            sma_window=config.SMA_LOOKBACK_DAYS,
-            roc_lookback=config.RS_ROC_LOOKBACK_DAYS,
+            sma_window=universe_params["sma_lookback_days"],
+            roc_lookback=universe_params["roc_lookback_days"],
         )
 
         # Get latest date
@@ -56,9 +60,9 @@ async def generate_current_signals(request: SignalRequest):
 
         # Build recommended portfolio
         recommended_portfolio = []
-        if len(qualifying) >= request.top_n:
-            selected = qualifying.head(request.top_n)
-            weight = 1.0 / request.top_n
+        if len(qualifying) >= top_n:
+            selected = qualifying.head(top_n)
+            weight = 1.0 / top_n
             for _, row in selected.iterrows():
                 recommended_portfolio.append(HoldingItem(
                     rank=int(row['rank']),

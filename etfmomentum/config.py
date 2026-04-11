@@ -38,6 +38,27 @@ CASH_TICKER = "SGOV"
 # Files location: PROJECT_ROOT/etflist/
 # Available universes: emerging, developed, sp500
 
+# Per-universe optimised parameters (walk-forward consensus).
+# These are the only values third-party callers should rely on — just pass
+# the universe name; the package resolves the right parameters automatically.
+UNIVERSE_PARAMS = {
+    "sp500": {
+        "sma_lookback_days": 210,   # 10 months — in-sample optimised
+        "roc_lookback_days": 63,    # 3 months  — in-sample optimised
+        "top_n": 3,
+    },
+    "emerging": {
+        "sma_lookback_days": 252,   # 12 months — walk-forward consensus (5/6 windows)
+        "roc_lookback_days": 21,    # 1 month   — walk-forward consensus
+        "top_n": 3,
+    },
+    "developed": {
+        "sma_lookback_days": 168,   # 8 months  — walk-forward consensus (6/6 windows)
+        "roc_lookback_days": 21,    # 1 month   — walk-forward consensus
+        "top_n": 3,
+    },
+}
+
 # Backtest Parameters
 BACKTEST_START_DATE = "2016-01-01"
 BACKTEST_END_DATE = "2026-03-01"
@@ -81,6 +102,14 @@ HIGH_VOL_DEFENSIVE_SECTORS = ['XLP', 'XLU', 'XLV']  # Staples, Utilities, Health
 HIGH_VOL_TBILL_ETF = 'BIL'  # Short-term Treasury ETF (SGOV also works)
 HIGH_VOL_TBILL_ALLOCATION = 0.50  # 50% allocation in hybrid mode
 EXTREME_VOL_THRESHOLD = 0.35  # 35% annualized volatility for extreme regime
+
+# Correlation Filter (Anti-Overlap)
+# Prevents selecting highly correlated ETFs (e.g. SMH + XLK) in the same portfolio.
+# Greedy selection: take top-ranked, skip any candidate with rolling correlation
+# above threshold vs any already-selected holding.
+ENABLE_CORRELATION_FILTER = True
+CORRELATION_FILTER_THRESHOLD = 0.85  # Skip candidate if corr > this with any selected ETF
+CORRELATION_LOOKBACK_DAYS = 60       # Rolling window for daily return correlation
 
 # Breadth Filter (Master Switch)
 # Uses % of sector ETFs above their SMA as a leading defensive indicator.

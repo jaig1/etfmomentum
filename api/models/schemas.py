@@ -10,7 +10,6 @@ from datetime import date
 class SignalRequest(BaseModel):
     """Request model for signal generation."""
     universe: str = Field(..., description="ETF universe (sp500, emerging, developed)")
-    top_n: int = Field(3, description="Number of top holdings", ge=1, le=10)
 
 
 class BacktestRequest(BaseModel):

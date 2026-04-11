@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 import logging
 
-from .rs_engine import generate_signals, get_qualifying_etfs
+from .rs_engine import generate_signals, get_qualifying_etfs, apply_correlation_filter
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +164,7 @@ def _compute_tickers(
     etf_tickers: List[str],
     evaluation_date: pd.Timestamp,
     top_n: int,
+    universe: str = "sp500",
 ) -> List[str]:
     """
     Core signal selection logic — shared by both public and internal interfaces.
@@ -176,6 +177,7 @@ def _compute_tickers(
         etf_tickers: List of ETF tickers to evaluate
         evaluation_date: Date to evaluate signals on
         top_n: Number of top ETFs to select
+        universe: Universe name used to resolve per-universe optimal parameters
 
     Returns:
         List of selected tickers with SGOV replacing any underperformers
@@ -183,15 +185,27 @@ def _compute_tickers(
     from . import config
     from .rs_engine import get_qualifying_etfs
 
+    params = config.UNIVERSE_PARAMS.get(universe, config.UNIVERSE_PARAMS["sp500"])
+
     signals, latest_date = generate_current_signals(
         price_data=price_data,
         etf_tickers=etf_tickers,
         spy_ticker=config.BENCHMARK_TICKER,
-        sma_window=config.SMA_LOOKBACK_DAYS,
-        roc_lookback=config.RS_ROC_LOOKBACK_DAYS,
+        sma_window=params["sma_lookback_days"],
+        roc_lookback=params["roc_lookback_days"],
     )
 
     qualifying = get_qualifying_etfs(signals, evaluation_date)
+
+    if config.ENABLE_CORRELATION_FILTER and not qualifying.empty:
+        qualifying = apply_correlation_filter(
+            qualifying,
+            price_data,
+            top_n,
+            config.CORRELATION_LOOKBACK_DAYS,
+            config.CORRELATION_FILTER_THRESHOLD,
+        )
+
     selected = list(qualifying.head(top_n)['ticker']) if not qualifying.empty else []
 
     if len(selected) < top_n:
@@ -241,8 +255,9 @@ def run_signals(
     from .etf_loader import load_universe_by_name
     from .data_fetcher import fetch_all_data
 
+    params = config.UNIVERSE_PARAMS.get(universe, config.UNIVERSE_PARAMS["sp500"])
     if top_n is None:
-        top_n = config.TOP_N_HOLDINGS
+        top_n = params["top_n"]
 
     etf_universe = load_universe_by_name(universe, config.ETFLIST_DIR)
     etf_tickers = list(etf_universe.keys())
@@ -262,7 +277,7 @@ def run_signals(
     )
 
     evaluation_date = date if date is not None else price_data.index[-1]
-    return _compute_tickers(price_data, etf_tickers, evaluation_date, top_n)
+    return _compute_tickers(price_data, etf_tickers, evaluation_date, top_n, universe)
 
 
 def _run_signals_with_data(
@@ -290,8 +305,9 @@ def _run_signals_with_data(
     from . import config
     from .etf_loader import load_universe_by_name
 
+    params = config.UNIVERSE_PARAMS.get(universe, config.UNIVERSE_PARAMS["sp500"])
     if top_n is None:
-        top_n = config.TOP_N_HOLDINGS
+        top_n = params["top_n"]
 
     etf_universe = load_universe_by_name(universe, config.ETFLIST_DIR)
     etf_tickers = list(etf_universe.keys())
@@ -299,7 +315,7 @@ def _run_signals_with_data(
     # Slice to rebalance date to avoid lookahead bias
     price_data_slice = price_data[price_data.index <= date]
 
-    return _compute_tickers(price_data_slice, etf_tickers, date, top_n)
+    return _compute_tickers(price_data_slice, etf_tickers, date, top_n, universe)
 
 
 def get_all_etf_current_status(
