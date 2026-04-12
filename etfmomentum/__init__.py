@@ -21,7 +21,7 @@ CLI:
     etfmomentum backtest --universe commodity
 """
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 from .signal_generator import run_signals
 
