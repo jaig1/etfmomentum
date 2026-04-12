@@ -329,7 +329,7 @@ def run_signals(
     third-party use. For backtest use, call _run_signals_with_data instead.
 
     Args:
-        universe: ETF universe name ('sp500', 'developed', 'emerging')
+        universe: ETF universe name ('sp500', 'developed', 'emerging', 'commodity')
         date: Date to evaluate signals (None = today)
         top_n: Number of top ETFs to select (None = use config.TOP_N_HOLDINGS)
 

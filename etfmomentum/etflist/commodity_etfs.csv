@@ -1,0 +1,11 @@
+Ticker,ETF_Name,Issuer
+"GLD","Gold","SPDR (State Street)"
+"SLV","Silver","iShares (BlackRock)"
+"PPLT","Platinum","abrdn"
+"PALL","Palladium","abrdn"
+"DBC","Broad Commodities","Invesco"
+"DBB","Base Metals","Invesco"
+"BNO","Brent Crude Oil","United States Commodity Funds"
+"UNG","Natural Gas","United States Commodity Funds"
+"CPER","Copper","US Commodity Funds"
+"CORN","Corn","Teucrium"

@@ -57,6 +57,11 @@ UNIVERSE_PARAMS = {
         "roc_lookback_days": 21,    # 1 month   — walk-forward consensus
         "top_n": 3,
     },
+    "commodity": {
+        "sma_lookback_days": 126,   # 6 months  — walk-forward consensus (6/6 windows)
+        "roc_lookback_days": 126,   # 6 months  — walk-forward consensus (6/6 windows); ROC=1mo overfits in-sample
+        "top_n": 3,                 # in-sample optimal; correlation filter makes TopN>3 redundant in this universe
+    },
 }
 
 # Backtest Parameters

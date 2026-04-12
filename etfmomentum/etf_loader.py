@@ -80,6 +80,7 @@ def get_available_universes(etflist_dir: Path) -> Dict[str, str]:
         'emerging': 'emerging_market_etfs.csv',
         'developed': 'developed_market_etfs.csv',
         'sp500': 'sp500_sector_etfs.csv',
+        'commodity': 'commodity_etfs.csv',
     }
 
     for universe_name, filename in universe_files.items():
@@ -95,7 +96,7 @@ def load_universe_by_name(universe_name: str, etflist_dir: Path) -> Dict[str, st
     Load ETF universe by name.
 
     Args:
-        universe_name: Name of universe (emerging, developed, sp500)
+        universe_name: Name of universe (emerging, developed, sp500, commodity)
         etflist_dir: Directory containing ETF list CSV files
 
     Returns:
@@ -109,6 +110,7 @@ def load_universe_by_name(universe_name: str, etflist_dir: Path) -> Dict[str, st
         'emerging': 'emerging_market_etfs.csv',
         'developed': 'developed_market_etfs.csv',
         'sp500': 'sp500_sector_etfs.csv',
+        'commodity': 'commodity_etfs.csv',
     }
 
     if universe_name not in universe_files:

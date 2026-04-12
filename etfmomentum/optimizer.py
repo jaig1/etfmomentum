@@ -19,6 +19,7 @@ from .config import (
     DATA_DIR,
     PRICE_DATA_CACHE,
 )
+from . import config as _config
 from .etf_loader import load_universe_by_name
 from .data_fetcher import load_data_from_cache
 from .rs_engine import generate_signals
@@ -39,40 +40,45 @@ def run_single_backtest(
     sma_window: int,
     roc_lookback: int,
     top_n: int,
+    universe: str = 'sp500',
 ) -> Dict[str, float]:
     """
     Run a single backtest with specific parameters.
 
     Args:
-        price_data: Price data DataFrame
-        etf_tickers: List of ETF tickers
-        spy_ticker: Benchmark ticker
+        price_data: Price data DataFrame (unused — backtest fetches its own)
+        etf_tickers: List of ETF tickers (unused — backtest loads from universe)
+        spy_ticker: Benchmark ticker (unused — backtest uses config)
         sma_window: SMA window in days
         roc_lookback: RS ROC lookback in days
         top_n: Number of top holdings
+        universe: ETF universe name
 
     Returns:
         Dictionary of performance metrics
     """
-    # Generate signals with specific parameters
-    signals = generate_signals(
-        price_data=price_data,
-        spy_ticker=spy_ticker,
-        etf_tickers=etf_tickers,
-        sma_window=sma_window,
-        roc_lookback=roc_lookback,
-    )
+    # Temporarily override UNIVERSE_PARAMS for this combination so the
+    # unified _compute_tickers pipeline picks up the test params.
+    original_params = _config.UNIVERSE_PARAMS.get(universe, {}).copy()
+    _config.UNIVERSE_PARAMS[universe] = {
+        'sma_lookback_days': sma_window,
+        'roc_lookback_days': roc_lookback,
+        'top_n': top_n,
+    }
 
-    # Run backtest
-    strategy_df, benchmark_df, rebalance_log = run_backtest(
-        signals=signals,
-        price_data=price_data,
-        spy_ticker=spy_ticker,
-        start_date=BACKTEST_START_DATE,
-        end_date=BACKTEST_END_DATE,
-        initial_capital=INITIAL_CAPITAL,
-        top_n=top_n,
-    )
+    try:
+        # Run backtest using the current unified pipeline
+        strategy_df, benchmark_df, rebalance_log = run_backtest(
+            universe=universe,
+            start_date=BACKTEST_START_DATE,
+            end_date=BACKTEST_END_DATE,
+            initial_capital=INITIAL_CAPITAL,
+            top_n=top_n,
+            rebalance_frequency=_config.REBALANCE_FREQUENCY,
+        )
+    finally:
+        # Always restore original params
+        _config.UNIVERSE_PARAMS[universe] = original_params
 
     # Calculate metrics
     strategy_metrics = calculate_metrics(
@@ -197,6 +203,7 @@ def optimize_parameters(
                 sma_window=sma_window,
                 roc_lookback=roc_lookback,
                 top_n=top_n,
+                universe=universe,
             )
 
             # Add parameters to results
