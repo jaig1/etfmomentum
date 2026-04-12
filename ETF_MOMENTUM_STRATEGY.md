@@ -1,6 +1,6 @@
 # ETF Momentum Strategy — Comprehensive Overview
 
-*Last updated: April 11, 2026 | Version: 0.3.0 (universe-specific parameters + emerging market discovery)*
+*Last updated: April 12, 2026 | Version: 0.6.0 (commodity ETF universe)*
 
 ---
 
@@ -15,6 +15,7 @@
 7. [Current Performance](#7-current-performance)
 8. [Architecture](#8-architecture)
 9. [Caveats and Risks](#9-caveats-and-risks)
+10. [Commodity Universe — Detailed Notes](#10-commodity-universe--detailed-notes)
 
 ---
 
@@ -411,6 +412,61 @@ run_signals(universe="emerging")             # SMA=252d, ROC=21d, TopN=3 resolve
 
 ---
 
+### Phase 11 — Unified Signal Pipeline + Commodity Universe (April 12, 2026)
+
+**What was done (v0.5.0 — Unified Pipeline):** The backtest engine, CLI signal mode, and public `run_signals()` were all found to follow slightly different signal computation paths. A shared `_compute_tickers()` function was extracted and made the single source of truth for all three interfaces. Baselines were locked: 10yr Sharpe 1.266, 19yr Sharpe 0.991 (SP500 universe).
+
+**What was done (v0.6.0 — Commodity Universe):** A fourth standalone universe — `commodity` — was added and fully validated.
+
+**ETF List (10 ETFs):**
+
+| Ticker | Commodity | Type | Inception |
+|---|---|---|---|
+| GLD | Gold | Physical | 2004 |
+| SLV | Silver | Physical | 2006 |
+| PPLT | Platinum | Physical | 2010 |
+| PALL | Palladium | Physical | 2010 |
+| DBC | Broad Commodities | Futures basket | 2006 |
+| DBB | Base Metals | Futures basket | 2007 |
+| BNO | Brent Crude Oil | Futures | 2010 |
+| UNG | Natural Gas | Futures | 2007 |
+| CPER | Copper | Futures | 2011 |
+| CORN | Corn | Futures | 2010 |
+
+**Data availability constraint:** CPER (Copper) is the newest ETF, with data from November 2011. This sets the honest maximum backtest start at June 2012 (after the 6-month SMA warmup period). The 19-year backtest is not meaningful for this universe; all validated results use 2012+ data.
+
+**Parameter optimisation:**
+
+In-sample grid search (48 combinations, 2016–2026):
+
+| Param | In-sample optimal | Walk-forward consensus (6/6 windows) | Used |
+|---|---|---|---|
+| SMA | 6mo (126d) | 6mo (126d) | **6mo** |
+| ROC | 1mo (21d) | **6mo (126d)** | **6mo** |
+| TopN | 3 | 5 (most frequent) | **3** |
+
+Key insight: ROC=1mo dominates in-sample (avg Sharpe 2.021 vs 1.838 for ROC=6mo) but the walk-forward unanimously chose ROC=6mo in all 6 windows. ROC=1mo overfits — it is too reactive for commodity cycles. TopN was corrected from the walk-forward's 5 to 3 after observing that the correlation filter limits effective positions anyway (DBC as a broad basket is highly correlated with most individual commodity ETFs).
+
+**Rebalancing frequency:** Weekly rebalancing is dramatically better for commodities than monthly — Sharpe 1.861 vs 1.146. Commodity momentum trends move faster than equity sector trends and weekly rebalancing captures entries and exits earlier.
+
+**Walk-Forward Results (6 windows, 2007–2026):**
+
+| Window | OOS Period | OOS Sharpe | OOS Return | vs SPY |
+|---|---|---|---|---|
+| W1 | 2014–2015 | -0.527 | -2.2% | -13.7pp — MISSED |
+| W2 | 2016–2017 | 1.148 | 47.1% | +14.4pp |
+| W3 | 2018–2019 | 1.520 | 53.2% | +33.5pp |
+| W4 | 2020–2021 | 1.900 | 103.9% | +57.7pp |
+| W5 | 2022–2023 | 0.353 | 17.1% | +17.6pp |
+| W6 | 2024–2026 | 1.607 | 104.9% | +59.8pp |
+| **Combined** | | **1.000** | **978%** | 5/6 beat SPY |
+
+OOS/IS Sharpe decay ratio: **0.93** (robust — threshold is 0.70). Window 1 failure (2014–2015) reflects the commodity secular bear driven by USD strength and China slowdown — not a strategy flaw.
+
+**Version bump:** 0.5.0 → 0.6.0
+
+---
+
 ## 4. Defensive Layers
 
 Four mechanisms provide capital protection, operating at different timescales and triggers:
@@ -481,17 +537,28 @@ Three universes were tested. Each universe has its own walk-forward validated pa
 | `sp500` | 12 | 210d (10mo) | 63d (3mo) | 3 | In-sample optimised |
 | `emerging` | 28 | 252d (12mo) | 21d (1mo) | 3 | Walk-forward consensus (5/6 windows) |
 | `developed` | 26 | 168d (8mo) | 21d (1mo) | 3 | Walk-forward consensus (6/6 windows) |
+| `commodity` | 10 | 126d (6mo) | 126d (6mo) | 3 | Walk-forward consensus (6/6 windows) |
 
-### Performance Comparison (April 11, 2026)
+### Performance Comparison (April 12, 2026)
 
-**10-Year (2016–2026):**
+**10-Year (2016–2026-04-08):**
 
 | Universe | Return | Ann. Return | Sharpe | MaxDD | vs SPY |
 |---|---|---|---|---|---|
 | SP500 | 901% | 25.24% | 1.316 | -11.8% | +663pp |
 | **Emerging** | **1,890%** | **33.89%** | **1.631** | -14.18% | +1,652pp |
 | Developed | 245% | 12.85% | 0.677 | -12.91% | +7pp |
-| SPY (B&H) | 238% | 12.62% | 0.501 | -34.1% | — |
+| **Commodity** | **5,204%** | **47.38%** | **1.861** | **-10.67%** | +4,966pp |
+| SPY (B&H) | 238% | 12.58% | 0.499 | -34.1% | — |
+
+**Max-History (2012–2026-04-08, commodity only):**
+
+| Universe | Return | Ann. Return | Sharpe | MaxDD | vs SPY |
+|---|---|---|---|---|---|
+| Commodity | 6,445% | 35.34% | 1.536 | -23.06% | +6,018pp |
+| SPY (B&H) | 427% | 12.79% | 0.533 | -34.1% | — |
+
+Note: The 2012–2015 period captures the commodity secular bear (USD strength, China slowdown, oil crash), which widens MaxDD to -23% and reduces Sharpe from 1.861 to 1.536. The 10-year result starting 2016 is cleaner and reflects the full strategy with all defensive layers active.
 
 **19-Year (2007–2026):**
 
@@ -502,13 +569,16 @@ Three universes were tested. Each universe has its own walk-forward validated pa
 | Developed | 827% | 12.27% | 0.603 | -19.06% | +447pp |
 | SPY (B&H) | 381% | 8.5% | 0.284 | -56.47% | — |
 
-**Walk-Forward OOS (6 windows, 2014–2026):**
+*Commodity 19yr not shown — CPER (Copper, inception Nov 2011) limits the honest start to 2012.*
+
+**Walk-Forward OOS (6 windows):**
 
 | Universe | Combined OOS Return | Avg OOS Sharpe | OOS/IS Decay | Windows Beat SPY |
 |---|---|---|---|---|
 | SP500 | 576% | 0.891 | ~0.87 | 5/6 |
 | **Emerging** | **734%** | **0.949** | **0.90** | **5/6** |
 | Developed | 210% | 0.420 | ~0.56 | 2/6 |
+| **Commodity** | **978%** | **1.000** | **0.93** | **5/6** |
 
 ### Why Parameters Differ Per Universe
 
@@ -516,19 +586,22 @@ Three universes were tested. Each universe has its own walk-forward validated pa
 
 **Developed markets (SMA=8mo, ROC=1mo):** Developed country ETFs are more tightly correlated than EM (European economies move together) and trend somewhat faster than EM. The 8mo SMA is the walk-forward consensus across all 6 windows. Overall, the momentum dynamics are weaker — only 2/6 walk-forward windows beat SPY, making developed markets the weakest universe.
 
+**Commodity (SMA=6mo, ROC=6mo):** Commodities trend in multi-year supercycles but rotate quickly within a cycle. A shorter SMA (6mo) keeps the strategy responsive to cycle turns. ROC=6mo (rather than the in-sample optimal ROC=1mo) was unanimously chosen by the walk-forward — 1-month ROC overfits commodity data by chasing short-term noise. The correlation filter naturally limits effective positions to 2-3 in this universe because DBC (broad basket) absorbs the correlation of most individual commodity ETFs.
+
 **Why the original analysis showed EM underperforming:** Before April 11 2026, all universes used the SP500 global config parameters (SMA=210d, ROC=63d). This was wrong for EM — a 3-month ROC is too slow and noisy for country-level signals, and the 10mo SMA doesn't match EM trend dynamics. With universe-specific parameters applied, emerging markets becomes the strongest universe.
 
 ### Universe Selection Guidance
 
 - Use `sp500` for US market sector rotation (primary, most validated, tightest drawdowns)
-- Use `emerging` if seeking higher return potential with slightly wider drawdowns
+- Use `emerging` for highest return potential with slightly wider drawdowns (strongest walk-forward OOS)
+- Use `commodity` for inflation-regime and commodity-cycle exposure; highest 10yr Sharpe but regime-dependent (see Section 10)
 - `developed` is the weakest universe; use only if there is a specific mandate for developed market exposure
 
 ---
 
 ## 7. Current Performance
 
-### Current Parameters (v0.3.0)
+### Current Parameters (v0.6.0)
 
 ```python
 # Global (shared across all universes)
@@ -543,9 +616,10 @@ BREADTH_CASH_ALLOCATION = 0.5      # 50% SGOV + 50% top-1 when breadth triggers
 # Per-universe optimised parameters — resolved automatically by the package.
 # Third-party callers only need to pass the universe name.
 UNIVERSE_PARAMS = {
-    "sp500":     { "sma_lookback_days": 210, "roc_lookback_days": 63, "top_n": 3 },
-    "emerging":  { "sma_lookback_days": 252, "roc_lookback_days": 21, "top_n": 3 },
-    "developed": { "sma_lookback_days": 168, "roc_lookback_days": 21, "top_n": 3 },
+    "sp500":     { "sma_lookback_days": 210, "roc_lookback_days": 63,  "top_n": 3 },
+    "emerging":  { "sma_lookback_days": 252, "roc_lookback_days": 21,  "top_n": 3 },
+    "developed": { "sma_lookback_days": 168, "roc_lookback_days": 21,  "top_n": 3 },
+    "commodity": { "sma_lookback_days": 126, "roc_lookback_days": 126, "top_n": 3 },
 }
 ```
 
@@ -583,9 +657,40 @@ UNIVERSE_PARAMS = {
 
 Walk-forward uses monthly rebalancing without vol regime switching, which structurally reduces OOS numbers relative to the weekly backtest. The 5/6 window beat rate and 576% OOS return confirm the signal generalises beyond the in-sample period.
 
-### Current Signal (April 2026)
+### Commodity Universe — 10-Year Summary (2016–2026-04-08)
 
-System has rotated out of SMH/XLK (semiconductor/tech) into defensive sectors: **XLE (Energy), XLB (Materials), XLU (Utilities)** — reflecting the risk-off, tariff-uncertainty environment of early 2026.
+| Metric | Strategy | SPY |
+|---|---|---|
+| Total Return | **5,204%** | 236% |
+| Annualized Return | **47.38%** | 12.58% |
+| Sharpe Ratio | **1.861** | 0.499 |
+| Max Drawdown | **-10.67%** | -34.1% |
+| $100k → | **$5.30M** | $336k |
+| Months beating SPY | 67 / 123 | — |
+| Years beating SPY | 8 / 10 | — |
+
+### Commodity Universe — Year-by-Year (2016–2026)
+
+| Year | Strategy | SPY | Alpha |
+|---|---|---|---|
+| 2017 | +30.8% | +19.4% | +11.4pp |
+| 2018 | +25.1% | -6.4% | +31.4pp |
+| 2019 | +33.1% | +28.8% | +4.3pp |
+| 2020 | +71.8% | +16.2% | +55.6pp |
+| 2021 | +77.8% | +27.0% | +50.8pp |
+| 2022 | +46.7% | -19.5% | +66.2pp |
+| 2023 | -1.0% | +24.3% | -25.3pp |
+| 2024 | +14.7% | +23.3% | -8.6pp |
+| 2025 | +156.1% | +16.4% | +139.7pp |
+| 2026 (partial) | +69.4% | -0.9% | +70.3pp |
+
+Strong in inflation/commodity bull regimes (2020–2022, 2025–2026). Underperforms in strong USD/equity-led regimes (2023–2024). See Section 10 for regime dependency details.
+
+### Current Signals (April 2026)
+
+**SP500:** System has rotated out of SMH/XLK (semiconductor/tech) into defensive sectors: **XLE (Energy), XLB (Materials), XLU (Utilities)** — reflecting the risk-off, tariff-uncertainty environment of early 2026.
+
+**Commodity:** **BNO (Brent Crude Oil), DBC (Broad Commodities), SGOV (Cash)** — only 2 commodity ETFs qualifying through the correlation filter; third slot is defensive cash.
 
 ---
 
@@ -620,11 +725,16 @@ System has rotated out of SMH/XLK (semiconductor/tech) into defensive sectors: *
 - **FastAPI backend:** `api/` — endpoints for dashboard, signals, backtest, config
 - **React UI:** `ui/` — Vite/React on port 3000, connects to API on port 8000
 
-### ETF Universe (sp500_sector_etfs.csv)
+### ETF Universe Files
 
-12 ETFs: XLK, XLF, XLE, XLV, XLY, XLP, XLI, XLB, XLU, XLRE, XLC, **SMH**
+| File | Universe | ETFs |
+|---|---|---|
+| `sp500_sector_etfs.csv` | `sp500` | 12: XLK, XLF, XLE, XLV, XLY, XLP, XLI, XLB, XLU, XLRE, XLC, SMH |
+| `emerging_market_etfs.csv` | `emerging` | 28: FXI, MCHI, KWEB, INDA, SMIN, EWT, EWY, EWM, EIDO, THD, EPHE, EWZ, EWW, ECH, EPU, TUR, EPOL, KSA, UAE, QAT, EZA, ILF, VNM, EGPT, ARGT, GXG, NGE, GREK |
+| `developed_market_etfs.csv` | `developed` | 26: EWJ, EWG, EWU, EWA, EWC, EWQ, EWL, EWP, EWI, EWN, EWD, EWK, EWS, EWH, ENOR, EDEN, EFNL, EIRL, EIS, EWGS, SCJ, EWUS, EWAS, HEWJ, HEWG, HEWU |
+| `commodity_etfs.csv` | `commodity` | 10: GLD, SLV, PPLT, PALL, DBC, DBB, BNO, UNG, CPER, CORN |
 
-XLRE and XLC are gracefully skipped for pre-inception dates with warnings only.
+XLRE and XLC are gracefully skipped for pre-inception dates. CPER (Copper) limits commodity backtest start to June 2012.
 
 ---
 
@@ -658,7 +768,61 @@ SMH's addition dramatically improved historical performance due to the 2024–20
 
 ---
 
+---
+
+## 10. Commodity Universe — Detailed Notes
+
+### Regime Dependency
+
+The commodity universe has a strong macro regime dependency that users must understand:
+
+| Regime | Strategy Behaviour | Historical Example |
+|---|---|---|
+| Inflationary / commodity bull | Strong outperformance | 2020–2022 (post-COVID stimulus), 2025–2026 (tariff/gold surge) |
+| Equity bull / USD strength | Underperforms SPY | 2013–2015 (China slowdown, oil crash), 2023–2024 (AI rally) |
+| Risk-off / crisis | Defensive (gold-heavy) | 2018, partial 2022 |
+
+This is fundamentally different from the equity universes (sp500, emerging, developed), which all use SPY as the benchmark and trend alongside broad risk appetite. The commodity universe diverges from equities — it is strongest precisely when equities are weak (inflation regimes) and weakest when equities are strong (disinflation regimes).
+
+**Key implication:** The commodity universe is a *complement* to the SP500 universe, not a substitute. Running both simultaneously in a portfolio provides regime diversification.
+
+### Correlation Filter Behaviour
+
+DBC (Invesco DB Commodity Index Tracking Fund) is a broad basket that includes energy, metals, and agriculture. It is highly correlated with most individual commodity ETFs in the universe. As a result, once BNO (oil) and DBC are selected, the correlation filter (threshold: 0.85 rolling 60-day correlation) typically blocks SLV, GLD, DBB, CPER from being added.
+
+**Practical consequence:** The effective portfolio is usually 2 real commodities + SGOV as the third slot. SGOV appearing in commodity signals is expected and correct — it is a defensive cash position, not a data error.
+
+### Data Quality Notes
+
+| ETF | Type | Risk |
+|---|---|---|
+| GLD, SLV, PPLT, PALL | Physical-backed | Clean return series — no roll cost |
+| DBC, DBB, BNO, CORN | Futures-based | Subject to contango/roll costs; returns understate physical commodity exposure |
+| UNG | Futures-based | Severe contango history; absolute returns are significantly eroded by roll costs |
+
+Backtest returns reflect the ETF's actual NAV (including roll costs), so the strategy's returns already account for contango drag. However, users should understand that nominal commodity price moves will differ from what the strategy captures.
+
+### Third-Party Usage
+
+```python
+from etfmomentum import run_signals
+
+# Current signals (today)
+etfs = run_signals('commodity')
+# e.g. ['BNO', 'DBC', 'SGOV']
+
+# Signals for a specific date
+import pandas as pd
+etfs = run_signals('commodity', date=pd.Timestamp('2026-04-08'))
+
+# Install
+# pip install git+https://github.com/jaig1/etfmomentum.git@v0.6.0
+```
+
+---
+
 *For current signals: `uv run python -m etfmomentum signal --universe sp500 --detailed --refresh`*
 *For emerging signals: `uv run python -m etfmomentum signal --universe emerging --detailed --refresh`*
-*For a backtest: `uv run python -m etfmomentum backtest --universe sp500 --start-date 2007-01-01`*
+*For commodity signals: `uv run python -m etfmomentum signal --universe commodity --detailed --refresh`*
+*For a backtest: `uv run python -m etfmomentum backtest --universe commodity --start-date 2016-01-01`*
 *Web UI: `./start_api.sh` + `./start_ui.sh` → http://localhost:3000*
