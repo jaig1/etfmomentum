@@ -1,0 +1,13 @@
+Ticker,ETF_Name,Issuer
+"SPY","US Large Cap Equities","SPDR (State Street)"
+"IWM","US Small Cap Equities","iShares (BlackRock)"
+"QQQ","US Tech / Growth Equities","Invesco"
+"EFA","Developed ex-US Equities","iShares (BlackRock)"
+"EEM","Emerging Market Equities","iShares (BlackRock)"
+"TLT","Long-Term Treasuries (20yr+)","iShares (BlackRock)"
+"IEF","Intermediate Treasuries (7-10yr)","iShares (BlackRock)"
+"LQD","Investment Grade Corporate Bonds","iShares (BlackRock)"
+"HYG","High Yield Corporate Bonds","iShares (BlackRock)"
+"GLD","Gold","SPDR (State Street)"
+"VNQ","US Real Estate (REITs)","Vanguard"
+"DBC","Broad Commodities","Invesco"

@@ -62,6 +62,11 @@ UNIVERSE_PARAMS = {
         "roc_lookback_days": 126,   # 6 months  — walk-forward consensus (6/6 windows); ROC=1mo overfits in-sample
         "top_n": 3,                 # in-sample optimal; correlation filter makes TopN>3 redundant in this universe
     },
+    "multi_asset": {
+        "sma_lookback_days": 126,   # 6 months  — walk-forward consensus (6/6 windows)
+        "roc_lookback_days": 63,    # 3 months  — walk-forward consensus (4/6 windows)
+        "top_n": 5,                 # walk-forward consensus (4/6 windows); wider TopN suits 12-ETF cross-asset universe
+    },
 }
 
 # Backtest Parameters
