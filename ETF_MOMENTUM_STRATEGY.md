@@ -1,6 +1,6 @@
 # ETF Momentum Strategy — Comprehensive Overview
 
-*Last updated: April 12, 2026 | Version: 0.6.0 (commodity ETF universe)*
+*Last updated: April 12, 2026 | Version: 0.7.0 (multi-asset ETF universe)*
 
 ---
 
@@ -16,6 +16,7 @@
 8. [Architecture](#8-architecture)
 9. [Caveats and Risks](#9-caveats-and-risks)
 10. [Commodity Universe — Detailed Notes](#10-commodity-universe--detailed-notes)
+11. [Multi-Asset Universe — Detailed Notes](#11-multi-asset-universe--detailed-notes)
 
 ---
 
@@ -528,7 +529,7 @@ The top 3 ranked parameter combinations are tightly clustered (Sharpe 0.652–0.
 
 ## 6. Universe Analysis
 
-Three universes were tested. Each universe has its own walk-forward validated parameters — the package resolves these automatically when a universe is specified. Third-party callers only need to pass the universe name.
+Five universes are supported. Each has its own walk-forward validated parameters — the package resolves these automatically when a universe is specified. Third-party callers only need to pass the universe name.
 
 ### Validated Parameters Per Universe
 
@@ -538,6 +539,7 @@ Three universes were tested. Each universe has its own walk-forward validated pa
 | `emerging` | 28 | 252d (12mo) | 21d (1mo) | 3 | Walk-forward consensus (5/6 windows) |
 | `developed` | 26 | 168d (8mo) | 21d (1mo) | 3 | Walk-forward consensus (6/6 windows) |
 | `commodity` | 10 | 126d (6mo) | 126d (6mo) | 3 | Walk-forward consensus (6/6 windows) |
+| `multi_asset` | 12 | 126d (6mo) | 63d (3mo) | 5 | Walk-forward consensus (4/6 windows) |
 
 ### Performance Comparison (April 12, 2026)
 
@@ -549,6 +551,7 @@ Three universes were tested. Each universe has its own walk-forward validated pa
 | **Emerging** | **1,890%** | **33.89%** | **1.631** | -14.18% | +1,652pp |
 | Developed | 245% | 12.85% | 0.677 | -12.91% | +7pp |
 | **Commodity** | **5,204%** | **47.38%** | **1.861** | **-10.67%** | +4,966pp |
+| Multi-Asset | 470% | 18.54% | 1.147 | -13.05% | +232pp |
 | SPY (B&H) | 238% | 12.58% | 0.499 | -34.1% | — |
 
 **Max-History (2012–2026-04-08, commodity only):**
@@ -567,6 +570,7 @@ Note: The 2012–2015 period captures the commodity secular bear (USD strength, 
 | SP500 | 2,955% | 19.46% | 1.025 | -12.7% | +2,577pp |
 | **Emerging** | **16,320%** | **30.36%** | **1.426** | -18.51% | +15,940pp |
 | Developed | 827% | 12.27% | 0.603 | -19.06% | +447pp |
+| Multi-Asset | 2,425% | 18.28% | 1.062 | — | +2,047pp |
 | SPY (B&H) | 381% | 8.5% | 0.284 | -56.47% | — |
 
 *Commodity 19yr not shown — CPER (Copper, inception Nov 2011) limits the honest start to 2012.*
@@ -579,6 +583,7 @@ Note: The 2012–2015 period captures the commodity secular bear (USD strength, 
 | **Emerging** | **734%** | **0.949** | **0.90** | **5/6** |
 | Developed | 210% | 0.420 | ~0.56 | 2/6 |
 | **Commodity** | **978%** | **1.000** | **0.93** | **5/6** |
+| Multi-Asset | 270% | 0.623 | ~0.78 | 2/6 |
 
 ### Why Parameters Differ Per Universe
 
@@ -588,6 +593,8 @@ Note: The 2012–2015 period captures the commodity secular bear (USD strength, 
 
 **Commodity (SMA=6mo, ROC=6mo):** Commodities trend in multi-year supercycles but rotate quickly within a cycle. A shorter SMA (6mo) keeps the strategy responsive to cycle turns. ROC=6mo (rather than the in-sample optimal ROC=1mo) was unanimously chosen by the walk-forward — 1-month ROC overfits commodity data by chasing short-term noise. The correlation filter naturally limits effective positions to 2-3 in this universe because DBC (broad basket) absorbs the correlation of most individual commodity ETFs.
 
+**Multi-Asset (SMA=6mo, ROC=3mo, TopN=5):** Cross-asset rotation requires a wider portfolio (TopN=5) because the 12 ETFs span uncorrelated asset classes — holding only 3 would miss valid diversification. The 3-month ROC (walk-forward consensus 4/6 windows) balances responsiveness against noise. Note: SPY is both a universe member and the RS benchmark, creating a circularity that limits the RS signal quality for SPY itself. See Section 11.
+
 **Why the original analysis showed EM underperforming:** Before April 11 2026, all universes used the SP500 global config parameters (SMA=210d, ROC=63d). This was wrong for EM — a 3-month ROC is too slow and noisy for country-level signals, and the 10mo SMA doesn't match EM trend dynamics. With universe-specific parameters applied, emerging markets becomes the strongest universe.
 
 ### Universe Selection Guidance
@@ -595,13 +602,14 @@ Note: The 2012–2015 period captures the commodity secular bear (USD strength, 
 - Use `sp500` for US market sector rotation (primary, most validated, tightest drawdowns)
 - Use `emerging` for highest return potential with slightly wider drawdowns (strongest walk-forward OOS)
 - Use `commodity` for inflation-regime and commodity-cycle exposure; highest 10yr Sharpe but regime-dependent (see Section 10)
+- Use `multi_asset` for cross-asset class rotation with drawdown protection; lower alpha vs equities but strong risk-adjusted returns (see Section 11)
 - `developed` is the weakest universe; use only if there is a specific mandate for developed market exposure
 
 ---
 
 ## 7. Current Performance
 
-### Current Parameters (v0.6.0)
+### Current Parameters (v0.7.0)
 
 ```python
 # Global (shared across all universes)
@@ -616,10 +624,11 @@ BREADTH_CASH_ALLOCATION = 0.5      # 50% SGOV + 50% top-1 when breadth triggers
 # Per-universe optimised parameters — resolved automatically by the package.
 # Third-party callers only need to pass the universe name.
 UNIVERSE_PARAMS = {
-    "sp500":     { "sma_lookback_days": 210, "roc_lookback_days": 63,  "top_n": 3 },
-    "emerging":  { "sma_lookback_days": 252, "roc_lookback_days": 21,  "top_n": 3 },
-    "developed": { "sma_lookback_days": 168, "roc_lookback_days": 21,  "top_n": 3 },
-    "commodity": { "sma_lookback_days": 126, "roc_lookback_days": 126, "top_n": 3 },
+    "sp500":       { "sma_lookback_days": 210, "roc_lookback_days": 63,  "top_n": 3 },
+    "emerging":    { "sma_lookback_days": 252, "roc_lookback_days": 21,  "top_n": 3 },
+    "developed":   { "sma_lookback_days": 168, "roc_lookback_days": 21,  "top_n": 3 },
+    "commodity":   { "sma_lookback_days": 126, "roc_lookback_days": 126, "top_n": 3 },
+    "multi_asset": { "sma_lookback_days": 126, "roc_lookback_days": 63,  "top_n": 5 },
 }
 ```
 
@@ -686,6 +695,26 @@ Walk-forward uses monthly rebalancing without vol regime switching, which struct
 
 Strong in inflation/commodity bull regimes (2020–2022, 2025–2026). Underperforms in strong USD/equity-led regimes (2023–2024). See Section 10 for regime dependency details.
 
+### Multi-Asset Universe — 10-Year Summary (2016–2026-04-08)
+
+| Metric | Strategy | SPY |
+|---|---|---|
+| Total Return | **470%** | 238% |
+| Annualized Return | **18.54%** | 12.58% |
+| Sharpe Ratio | **1.147** | 0.499 |
+| Max Drawdown | **-13.05%** | -34.1% |
+| $100k → | **$570k** | $336k |
+| Years beating SPY | 6 / 10 | — |
+
+### Multi-Asset Universe — 19-Year Summary (2007–2026-04-08)
+
+| Metric | Strategy | SPY |
+|---|---|---|
+| Total Return | **2,425%** | 381% |
+| Annualized Return | **18.28%** | 8.5% |
+| Sharpe Ratio | **1.062** | 0.284 |
+| Years beating SPY | 10 / 19 | — |
+
 ### Current Signals (April 2026)
 
 **SP500:** System has rotated out of SMH/XLK (semiconductor/tech) into defensive sectors: **XLE (Energy), XLB (Materials), XLU (Utilities)** — reflecting the risk-off, tariff-uncertainty environment of early 2026.
@@ -733,8 +762,9 @@ Strong in inflation/commodity bull regimes (2020–2022, 2025–2026). Underperf
 | `emerging_market_etfs.csv` | `emerging` | 28: FXI, MCHI, KWEB, INDA, SMIN, EWT, EWY, EWM, EIDO, THD, EPHE, EWZ, EWW, ECH, EPU, TUR, EPOL, KSA, UAE, QAT, EZA, ILF, VNM, EGPT, ARGT, GXG, NGE, GREK |
 | `developed_market_etfs.csv` | `developed` | 26: EWJ, EWG, EWU, EWA, EWC, EWQ, EWL, EWP, EWI, EWN, EWD, EWK, EWS, EWH, ENOR, EDEN, EFNL, EIRL, EIS, EWGS, SCJ, EWUS, EWAS, HEWJ, HEWG, HEWU |
 | `commodity_etfs.csv` | `commodity` | 10: GLD, SLV, PPLT, PALL, DBC, DBB, BNO, UNG, CPER, CORN |
+| `multi_asset_etfs.csv` | `multi_asset` | 12: SPY, IWM, QQQ, EFA, EEM, TLT, IEF, LQD, HYG, GLD, VNQ, DBC |
 
-XLRE and XLC are gracefully skipped for pre-inception dates. CPER (Copper) limits commodity backtest start to June 2012.
+XLRE and XLC are gracefully skipped for pre-inception dates. CPER (Copper) limits commodity backtest start to June 2012. HYG (April 2007) is the limiting ETF for multi_asset — backtest starts July 2007 after SMA warmup.
 
 ---
 
@@ -821,8 +851,65 @@ etfs = run_signals('commodity', date=pd.Timestamp('2026-04-08'))
 
 ---
 
+---
+
+## 11. Multi-Asset Universe — Detailed Notes
+
+### Universe Composition
+
+12 ETFs spanning six asset classes:
+
+| Asset Class | ETFs |
+|---|---|
+| US Equities (size/style) | SPY (large cap), IWM (small cap), QQQ (tech/growth) |
+| International Equities | EFA (developed ex-US), EEM (emerging markets) |
+| Fixed Income | TLT (20yr+ Treasuries), IEF (7-10yr Treasuries), LQD (IG corporate), HYG (high yield) |
+| Real Assets | GLD (gold), VNQ (US REITs) |
+| Commodities | DBC (broad commodities basket) |
+
+### SPY Circularity
+
+SPY serves a dual role: it is both a universe member (US Large Cap) and the benchmark used to compute RS ratios for all ETFs including itself. This means SPY's RS ratio is always ~1.0 — it neither outperforms nor underperforms itself. As a result, SPY only enters the portfolio when absolute trend is positive and other assets are weaker, not via the RS signal that drives the other 11 members.
+
+**Practical implication:** The strategy functions primarily as a rotation across non-SPY asset classes, with SPY acting as a passive anchor. This is by design — the cross-asset diversification benefit comes from rotating into bonds, gold, or international equities when US equities are lagging, not from overweighting SPY.
+
+### Walk-Forward Caveat
+
+Only 2/6 walk-forward windows beat SPY (vs 5/6 for SP500 and emerging). This is structurally expected: the SPY circularity limits signal quality, and the cross-asset universe includes fixed income and commodities that will naturally underperform in equity bull regimes. The strategy's value proposition is **drawdown protection and risk-adjusted returns** (Sharpe 1.147 vs SPY 0.499, MaxDD -13% vs -34%) rather than raw outperformance in equity bull markets.
+
+The decay ratio (0.78 OOS/IS) is the weakest of all universes. Users considering the multi-asset universe should weight the 19-year Sharpe (1.062) and drawdown metrics more heavily than the 10-year return comparison vs SPY.
+
+### Regime Behaviour
+
+| Regime | Strategy Behaviour |
+|---|---|
+| Equity bull (no inflation) | Rotates into QQQ, SPY, EEM — competitive with SPY |
+| Risk-off / crisis | Rotates into TLT, IEF, GLD — significant drawdown protection |
+| Inflationary / commodity bull | Rotates into GLD, DBC, EEM — captures real asset appreciation |
+| Rising rate environment | May hold HYG or LQD briefly before rotating to short-duration or equities |
+
+### Third-Party Usage
+
+```python
+from etfmomentum import run_signals
+
+# Current signals (today)
+etfs = run_signals('multi_asset')
+# e.g. ['QQQ', 'GLD', 'TLT', 'SPY', 'IWM']
+
+# Signals for a specific date
+import pandas as pd
+etfs = run_signals('multi_asset', date=pd.Timestamp('2026-04-08'))
+
+# Install
+# pip install git+https://github.com/jaig1/etfmomentum.git@v0.7.0
+```
+
+---
+
 *For current signals: `uv run python -m etfmomentum signal --universe sp500 --detailed --refresh`*
 *For emerging signals: `uv run python -m etfmomentum signal --universe emerging --detailed --refresh`*
 *For commodity signals: `uv run python -m etfmomentum signal --universe commodity --detailed --refresh`*
-*For a backtest: `uv run python -m etfmomentum backtest --universe commodity --start-date 2016-01-01`*
+*For multi-asset signals: `uv run python -m etfmomentum signal --universe multi_asset --detailed --refresh`*
+*For a backtest: `uv run python -m etfmomentum backtest --universe multi_asset --start-date 2016-01-01`*
 *Web UI: `./start_api.sh` + `./start_ui.sh` → http://localhost:3000*
