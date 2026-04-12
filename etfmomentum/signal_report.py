@@ -34,12 +34,24 @@ def generate_signal_report(
             'Rank': etf['rank'],
             'ETF': etf['ticker'],
             'Country/Region': etf_universe.get(etf['ticker'], 'Unknown'),
-            'Mom. Quality': f"{etf['momentum_quality']:.2f}",
-            'RS ROC (%)': f"{etf['rs_roc'] * 100:.2f}",
+            'Mom. Quality': f"{etf['momentum_quality']:.2f}" if etf['momentum_quality'] is not None else '-',
+            'RS ROC (%)': f"{etf['rs_roc'] * 100:.2f}" if etf['rs_roc'] is not None else '-',
             'Allocation (%)': f"{etf['weight'] * 100:.0f}",
         })
 
     df = pd.DataFrame(rows)
+
+    # Add SGOV row if breadth filter or SGOV replacement triggered
+    if portfolio.get('cash_allocation', 0) > 0:
+        cash_row = pd.DataFrame([{
+            'Rank': '-',
+            'ETF': config.CASH_TICKER,
+            'Country/Region': 'Cash (T-Bills)',
+            'Mom. Quality': '-',
+            'RS ROC (%)': '-',
+            'Allocation (%)': f"{portfolio['cash_allocation'] * 100:.0f}",
+        }])
+        df = pd.concat([df, cash_row], ignore_index=True)
 
     # Add SPY row if applicable
     if portfolio['spy_allocation'] > 0:
@@ -47,6 +59,7 @@ def generate_signal_report(
             'Rank': '-',
             'ETF': 'SPY',
             'Country/Region': 'S&P 500 (Fallback)',
+            'Mom. Quality': '-',
             'RS ROC (%)': '-',
             'Allocation (%)': f"{portfolio['spy_allocation'] * 100:.0f}",
         }])

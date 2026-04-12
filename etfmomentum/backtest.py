@@ -7,7 +7,6 @@ from datetime import datetime
 import logging
 
 from .signal_generator import _run_signals_with_data
-from .rs_engine import calculate_sector_breadth
 
 logger = logging.getLogger(__name__)
 
@@ -273,27 +272,7 @@ def run_backtest(
     for i, date in enumerate(trading_dates):
         # On rebalance dates, delegate to signals module for ticker selection
         if date >= next_rebalance_date:
-            # Breadth filter: reduce concentration when broad participation is collapsing
-            breadth_triggered = False
-            if config.ENABLE_BREADTH_FILTER:
-                price_slice = price_data[price_data.index <= date]
-                breadth = calculate_sector_breadth(price_slice, list(etf_universe.keys()), config.SMA_LOOKBACK_DAYS)
-                if breadth < config.BREADTH_FILTER_THRESHOLD:
-                    breadth_triggered = True
-                    logger.info(f"Breadth filter triggered on {date.date()}: {breadth:.1%} of sectors above SMA (cash={config.BREADTH_CASH_ALLOCATION:.0%})")
-
-            if breadth_triggered and config.BREADTH_CASH_ALLOCATION == 1.0:
-                # 100% cash — skip signal generation entirely
-                selected_tickers = [config.CASH_TICKER]
-            elif breadth_triggered and config.BREADTH_CASH_ALLOCATION == 0.5:
-                # 50% cash + 50% top-1 sector
-                top1 = _run_signals_with_data(universe=universe, price_data=price_data, date=date, top_n=1)
-                selected_tickers = [config.CASH_TICKER] + [t for t in top1 if t != config.CASH_TICKER]
-            elif breadth_triggered:
-                # 100% top-1 sector (original behavior)
-                selected_tickers = _run_signals_with_data(universe=universe, price_data=price_data, date=date, top_n=config.BREADTH_TOP_N_OVERRIDE)
-            else:
-                selected_tickers = _run_signals_with_data(universe=universe, price_data=price_data, date=date, top_n=top_n)
+            selected_tickers = _run_signals_with_data(universe=universe, price_data=price_data, date=date, top_n=top_n)
             weight = 1.0 / len(selected_tickers)
             new_holdings = {ticker: weight for ticker in selected_tickers}
 

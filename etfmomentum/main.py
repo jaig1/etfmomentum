@@ -26,8 +26,9 @@ from .report import (
 from .signal_generator import (
     calculate_signal_data_dates,
     generate_current_signals,
-    select_current_portfolio,
     get_all_etf_current_status,
+    _compute_tickers,
+    build_portfolio_from_tickers,
 )
 from .signal_report import (
     generate_signal_report,
@@ -210,9 +211,10 @@ def run_signal_mode(args):
         # Calculate data dates
         start_date, end_date = calculate_signal_data_dates(config.SIGNAL_DATA_LOOKBACK_DAYS)
 
-        # Fetch price data
+        # Fetch price data — include SGOV so breadth filter and cash replacement work
         logger.info("\n[1/3] Fetching recent price data...")
-        all_tickers = list(etf_universe.keys()) + [config.BENCHMARK_TICKER]
+        etf_tickers = list(etf_universe.keys())
+        all_tickers = etf_tickers + [config.BENCHMARK_TICKER, config.CASH_TICKER]
 
         price_data = get_price_data(
             ticker_list=all_tickers,
@@ -226,25 +228,22 @@ def run_signal_mode(args):
 
         logger.info(f"Price data loaded: {price_data.shape[0]} days, {price_data.shape[1]} tickers")
 
-        # Generate current signals
+        # Generate current signals — use per-universe params (same as backtest + run_signals)
         logger.info("\n[2/3] Generating current signals...")
-        etf_tickers = list(etf_universe.keys())
+        params = config.UNIVERSE_PARAMS.get(args.universe, config.UNIVERSE_PARAMS["sp500"])
 
         signals, latest_date = generate_current_signals(
             price_data=price_data,
             etf_tickers=etf_tickers,
             spy_ticker=config.BENCHMARK_TICKER,
-            sma_window=config.SMA_LOOKBACK_DAYS,
-            roc_lookback=config.RS_ROC_LOOKBACK_DAYS,
+            sma_window=params["sma_lookback_days"],
+            roc_lookback=params["roc_lookback_days"],
         )
 
-        # Select current portfolio
-        portfolio = select_current_portfolio(
-            signals=signals,
-            latest_date=latest_date,
-            top_n=args.top_n,
-            spy_ticker=config.BENCHMARK_TICKER,
-        )
+        # Select portfolio through the full pipeline (breadth filter, correlation filter,
+        # SGOV replacement) — identical path to backtest and third-party run_signals()
+        selected_tickers = _compute_tickers(price_data, etf_tickers, latest_date, args.top_n, args.universe)
+        portfolio = build_portfolio_from_tickers(selected_tickers, signals, latest_date, args.top_n)
 
         # Generate reports
         logger.info("\n[3/3] Generating reports...")

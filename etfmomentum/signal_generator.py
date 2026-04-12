@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 import logging
 
-from .rs_engine import generate_signals, get_qualifying_etfs, apply_correlation_filter
+from .rs_engine import generate_signals, get_qualifying_etfs, apply_correlation_filter, calculate_sector_breadth
 
 logger = logging.getLogger(__name__)
 
@@ -169,8 +169,8 @@ def _compute_tickers(
     """
     Core signal selection logic — shared by both public and internal interfaces.
 
-    Runs momentum signals, applies SPY fallback, and replaces underperformers
-    with SGOV. Not intended for direct external use.
+    Applies breadth filter, correlation filter, SPY fallback, and replaces
+    underperformers with SGOV. Not intended for direct external use.
 
     Args:
         price_data: Price DataFrame containing ETF, SPY and SGOV columns
@@ -183,9 +183,23 @@ def _compute_tickers(
         List of selected tickers with SGOV replacing any underperformers
     """
     from . import config
-    from .rs_engine import get_qualifying_etfs
 
     params = config.UNIVERSE_PARAMS.get(universe, config.UNIVERSE_PARAMS["sp500"])
+
+    # Breadth filter — check before running signals; same logic for live and backtest
+    effective_top_n = top_n
+    cash_prefix: List[str] = []
+    if config.ENABLE_BREADTH_FILTER:
+        breadth = calculate_sector_breadth(price_data, etf_tickers, params["sma_lookback_days"])
+        if breadth < config.BREADTH_FILTER_THRESHOLD:
+            logger.info(f"Breadth filter triggered on {evaluation_date.date()}: {breadth:.1%} of sectors above SMA (cash={config.BREADTH_CASH_ALLOCATION:.0%})")
+            if config.BREADTH_CASH_ALLOCATION == 1.0:
+                return [config.CASH_TICKER]
+            elif config.BREADTH_CASH_ALLOCATION == 0.5:
+                effective_top_n = 1
+                cash_prefix = [config.CASH_TICKER]
+            else:
+                effective_top_n = config.BREADTH_TOP_N_OVERRIDE
 
     signals, latest_date = generate_current_signals(
         price_data=price_data,
@@ -201,14 +215,14 @@ def _compute_tickers(
         qualifying = apply_correlation_filter(
             qualifying,
             price_data,
-            top_n,
+            effective_top_n,
             config.CORRELATION_LOOKBACK_DAYS,
             config.CORRELATION_FILTER_THRESHOLD,
         )
 
-    selected = list(qualifying.head(top_n)['ticker']) if not qualifying.empty else []
+    selected = list(qualifying.head(effective_top_n)['ticker']) if not qualifying.empty else []
 
-    if len(selected) < top_n:
+    if len(selected) < effective_top_n:
         selected.append(config.BENCHMARK_TICKER)
 
     # SGOV comparison — replace underperformers with SGOV, then deduplicate
@@ -226,10 +240,81 @@ def _compute_tickers(
                 if not pd.isna(ticker_roc) and ticker_roc < sgov_roc:
                     ticker = config.CASH_TICKER
             final.append(ticker)
-        seen = set()
+        seen: set = set()
         selected = [t for t in final if not (t in seen or seen.add(t))]
 
+    if cash_prefix:
+        selected = cash_prefix + [t for t in selected if t != config.CASH_TICKER]
+
     return selected
+
+
+def build_portfolio_from_tickers(
+    selected_tickers: List[str],
+    signals: Dict[str, pd.DataFrame],
+    latest_date: pd.Timestamp,
+    top_n: int,
+) -> Dict:
+    """
+    Build portfolio dict (for CLI reporting) from a list of selected tickers.
+
+    Looks up metadata (rank, rs_roc, momentum_quality) from signals for ETFs
+    that qualified. SGOV and SPY holdings get None metadata and are tracked
+    via cash_allocation / spy_allocation.
+
+    Args:
+        selected_tickers: Tickers returned by _compute_tickers
+        signals: Signals dict from generate_current_signals
+        latest_date: Evaluation date
+        top_n: Originally requested number of holdings
+
+    Returns:
+        Portfolio dict compatible with signal reporting functions
+    """
+    from . import config
+
+    qualifying = get_qualifying_etfs(signals, latest_date)
+    qualifying_map = (
+        {row['ticker']: row for _, row in qualifying.iterrows()}
+        if not qualifying.empty
+        else {}
+    )
+
+    weight = 1.0 / len(selected_tickers) if selected_tickers else 0.0
+
+    portfolio: Dict = {
+        'date': latest_date,
+        'selected_etfs': [],
+        'weights': {},
+        'spy_allocation': 0.0,
+        'cash_allocation': 0.0,
+        'qualifying_count': len(qualifying),
+    }
+
+    for ticker in selected_tickers:
+        portfolio['weights'][ticker] = weight
+        if ticker == config.BENCHMARK_TICKER:
+            portfolio['spy_allocation'] += weight
+        elif ticker == config.CASH_TICKER:
+            portfolio['cash_allocation'] += weight
+        else:
+            etf_entry: Dict = {
+                'ticker': ticker,
+                'rank': '-',
+                'rs_roc': None,
+                'momentum_quality': None,
+                'rs_ratio': None,
+                'weight': weight,
+            }
+            if ticker in qualifying_map:
+                row = qualifying_map[ticker]
+                etf_entry['rank'] = int(row['rank'])
+                etf_entry['rs_roc'] = row['rs_roc']
+                etf_entry['momentum_quality'] = row['momentum_quality']
+                etf_entry['rs_ratio'] = row['rs_ratio']
+            portfolio['selected_etfs'].append(etf_entry)
+
+    return portfolio
 
 
 def run_signals(
