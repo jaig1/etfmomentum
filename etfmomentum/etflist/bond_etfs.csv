@@ -1,0 +1,13 @@
+Ticker,ETF_Name,Issuer
+"TLT","Long Treasury 20+yr","iShares (BlackRock)"
+"IEF","Intermediate Treasury 7-10yr","iShares (BlackRock)"
+"SHY","Short Treasury 1-3yr","iShares (BlackRock)"
+"LQD","Investment Grade Corporate","iShares (BlackRock)"
+"AGG","Broad US Bond Market","iShares (BlackRock)"
+"TIP","TIPS Inflation-Protected","iShares (BlackRock)"
+"HYG","High Yield Corporate","iShares (BlackRock)"
+"MBB","Mortgage-Backed Securities","iShares (BlackRock)"
+"EMB","Emerging Market Bonds USD","iShares (BlackRock)"
+"MUB","Municipal Bonds","iShares (BlackRock)"
+"BKLN","Senior Loans Floating Rate","Invesco"
+"BWX","International Treasury ex-US","SPDR (State Street)"
