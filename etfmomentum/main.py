@@ -70,6 +70,16 @@ def parse_arguments():
     backtest_parser.add_argument('--initial-capital', type=float, default=config.INITIAL_CAPITAL,
                                  help=f'Initial capital (default: {config.INITIAL_CAPITAL})')
 
+    # Short-optimize mode
+    so_parser = subparsers.add_parser('short-optimize', help='Grid search over short sleeve parameters')
+    so_parser.add_argument('--universe', type=str, default='emerging',
+                           choices=['emerging', 'developed', 'sp500', 'commodity', 'multi_asset', 'factor', 'bond'],
+                           help='ETF universe to optimize against (default: emerging)')
+    so_parser.add_argument('--start-date', type=str, default='2016-01-01',
+                           help='Backtest start date (default: 2016-01-01)')
+    so_parser.add_argument('--end-date', type=str, default='2026-04-08',
+                           help='Backtest end date (default: 2026-04-08)')
+
     # Walk-forward mode
     wf_parser = subparsers.add_parser('walk-forward', help='Run walk-forward validation')
     wf_parser.add_argument('--universe', type=str, default='sp500',
@@ -120,7 +130,7 @@ def run_backtest_mode(args):
         # Run backtest — signals and price data are fetched internally
         logger.info("\n[1/3] Running backtest...")
         logger.info(f"Rebalance Frequency: {config.REBALANCE_FREQUENCY}")
-        strategy_values, benchmark_values, rebalance_log = run_backtest(
+        strategy_values, benchmark_values, rebalance_log, short_stats = run_backtest(
             universe=args.universe,
             start_date=args.start_date,
             end_date=args.end_date,
@@ -175,6 +185,18 @@ def run_backtest_mode(args):
         print_yearly_summary(yearly_returns, yearly_win_rate)
         print_monthly_returns(monthly_returns)
         print_portfolio_composition(portfolio_comp)
+
+        # Short sleeve summary (only shown when feature is enabled)
+        if short_stats.get('enabled'):
+            total = short_stats['total_rebalances']
+            active = short_stats['weeks_with_shorts']
+            logger.info("=" * 70)
+            logger.info("SHORT SLEEVE SUMMARY")
+            logger.info("=" * 70)
+            logger.info(f"  Activation rate : {active}/{total} weeks ({active/total*100:.0f}%)")
+            logger.info(f"  Avg gross exp   : {short_stats['avg_gross_exposure']:.1%}")
+            logger.info(f"  Stop triggers   : {short_stats['stop_triggers']}")
+            logger.info("=" * 70)
 
         logger.info("="*70)
         logger.info(f"Backtest complete! All reports saved to output/{args.universe}/")
@@ -284,6 +306,13 @@ def main():
     elif args.mode == 'walk-forward':
         from .walk_forward import run_walk_forward
         run_walk_forward(universe=args.universe, force_refresh=getattr(args, 'refresh', False))
+    elif args.mode == 'short-optimize':
+        from .short_optimizer import run_short_optimization
+        run_short_optimization(
+            universe=args.universe,
+            start_date=args.start_date,
+            end_date=args.end_date,
+        )
     else:
         logger.error("Please specify a mode: 'backtest' or 'signal'")
         logger.info("Examples:")

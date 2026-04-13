@@ -403,6 +403,138 @@ def _run_signals_with_data(
     return _compute_tickers(price_data_slice, etf_tickers, date, top_n, universe)
 
 
+def run_short_signals(universe: str) -> List[str]:
+    """
+    Public interface for live short signal generation.
+
+    Returns tickers to short for the given universe. Only universes listed in
+    config.SHORT_ENABLED_UNIVERSES return candidates — all others return [].
+    Returns [] when the breadth filter is triggered (defensive mode).
+
+    Internally fetches fresh FMP price data and excludes any ticker already
+    selected by the long signal pipeline to avoid long/short conflicts.
+
+    Args:
+        universe: ETF universe name ('emerging', 'sp500', etc.)
+
+    Returns:
+        List of tickers to short. Empty list if universe not enabled,
+        master switch off, or breadth filter triggered.
+    """
+    from . import config
+    from .etf_loader import load_universe_by_name
+    from .data_fetcher import fetch_all_data
+    from .rs_engine import get_short_candidates, calculate_sector_breadth
+
+    if not config.ENABLE_SHORT_SELLING:
+        return []
+    if universe not in config.SHORT_ENABLED_UNIVERSES:
+        return []
+
+    long_params  = config.UNIVERSE_PARAMS.get(universe, config.UNIVERSE_PARAMS['sp500'])
+    short_params = config.SHORT_UNIVERSE_PARAMS[universe]  # guaranteed present — checked above
+
+    etf_universe = load_universe_by_name(universe, config.ETFLIST_DIR)
+    etf_tickers = list(etf_universe.keys())
+    all_tickers = etf_tickers + [config.BENCHMARK_TICKER, config.CASH_TICKER]
+
+    start_date_str, end_date_str = calculate_signal_data_dates(config.SIGNAL_DATA_LOOKBACK_DAYS)
+    price_data = fetch_all_data(
+        ticker_list=all_tickers,
+        start_date=start_date_str,
+        end_date=end_date_str,
+        api_key=config.FMP_API_KEY,
+        api_delay=config.FMP_API_DELAY,
+    )
+
+    evaluation_date = price_data.index[-1]
+
+    # Breadth check — return [] when market is in defensive mode
+    breadth = calculate_sector_breadth(price_data, etf_tickers, long_params['sma_lookback_days'])
+    if config.ENABLE_BREADTH_FILTER and breadth < config.BREADTH_FILTER_THRESHOLD:
+        logger.info(f"run_short_signals({universe}): breadth filter triggered ({breadth:.1%}) — returning []")
+        return []
+
+    # Get current long tickers to exclude from short candidates
+    long_tickers = _compute_tickers(price_data, etf_tickers, evaluation_date, long_params['top_n'], universe)
+
+    # Generate signals and select short candidates using per-universe short params
+    signals, _ = generate_current_signals(
+        price_data=price_data,
+        etf_tickers=etf_tickers,
+        spy_ticker=config.BENCHMARK_TICKER,
+        sma_window=long_params['sma_lookback_days'],
+        roc_lookback=long_params['roc_lookback_days'],
+    )
+
+    candidates = get_short_candidates(
+        signals,
+        evaluation_date,
+        short_params['top_n'],
+        exclude_tickers=long_tickers,
+        qualification=short_params['qualification'],
+    )
+
+    return list(candidates['ticker']) if not candidates.empty else []
+
+
+def _run_short_signals_with_data(
+    universe: str,
+    price_data: pd.DataFrame,
+    date: pd.Timestamp,
+    long_tickers: List[str],
+    n: Optional[int] = None,
+) -> List[str]:
+    """
+    Internal interface for short candidate selection in backtest.
+
+    Mirrors _run_signals_with_data but returns the bottom N ETFs that fail
+    both filters, sorted by momentum_quality ascending (worst trend first).
+    Excludes any ticker already held long to avoid conflicts.
+
+    Args:
+        universe: ETF universe name
+        price_data: Full pre-fetched price DataFrame from the backtest
+        date: Rebalance date to evaluate signals on
+        long_tickers: Tickers currently held long — excluded from short candidates
+        n: Number of short candidates (None = use SHORT_UNIVERSE_PARAMS[universe]['top_n'])
+
+    Returns:
+        List of tickers to short (0 to n tickers)
+    """
+    from . import config
+    from .etf_loader import load_universe_by_name
+    from .rs_engine import get_short_candidates
+
+    long_params  = config.UNIVERSE_PARAMS.get(universe, config.UNIVERSE_PARAMS["sp500"])
+    short_params = config.SHORT_UNIVERSE_PARAMS.get(universe, {})
+
+    if n is None:
+        n = short_params.get('top_n', 2)
+
+    etf_universe = load_universe_by_name(universe, config.ETFLIST_DIR)
+    etf_tickers = list(etf_universe.keys())
+
+    # Slice to rebalance date to avoid lookahead bias
+    price_data_slice = price_data[price_data.index <= date]
+
+    signals, _ = generate_current_signals(
+        price_data=price_data_slice,
+        etf_tickers=etf_tickers,
+        spy_ticker=config.BENCHMARK_TICKER,
+        sma_window=long_params["sma_lookback_days"],
+        roc_lookback=long_params["roc_lookback_days"],
+    )
+
+    candidates = get_short_candidates(
+        signals, date, n,
+        exclude_tickers=long_tickers,
+        qualification=short_params.get('qualification', 'both_filters'),
+    )
+
+    return list(candidates['ticker']) if not candidates.empty else []
+
+
 def get_all_etf_current_status(
     signals: Dict[str, pd.DataFrame],
     latest_date: pd.Timestamp,
