@@ -287,6 +287,7 @@ def _optimize_window(
 def run_walk_forward(
     universe: str = "sp500",
     output_dir: Optional[Path] = None,
+    force_refresh: bool = False,
 ) -> pd.DataFrame:
     """
     Run full walk-forward validation.
@@ -329,11 +330,17 @@ def run_walk_forward(
 
     # Fetch price data once (uses BIL proxy if needed)
     logger.info("\nLoading price data...")
-    if config.PRICE_DATA_CACHE.exists():
-        price_data = load_data_from_cache(str(config.PRICE_DATA_CACHE))
-        logger.info(f"Loaded from cache: {price_data.shape}")
-    else:
-        logger.info("Cache not found — fetching from API (this will take a few minutes)...")
+    missing_tickers = [t for t in all_tickers if t not in (
+        load_data_from_cache(str(config.PRICE_DATA_CACHE)).columns.tolist()
+        if config.PRICE_DATA_CACHE.exists() and not force_refresh else []
+    )]
+    if force_refresh or not config.PRICE_DATA_CACHE.exists() or missing_tickers:
+        if force_refresh:
+            logger.info("Force refresh — fetching from API...")
+        elif missing_tickers:
+            logger.info(f"Tickers not in cache: {missing_tickers} — fetching from API...")
+        else:
+            logger.info("Cache not found — fetching from API (this will take a few minutes)...")
         price_data = fetch_all_data(
             ticker_list=all_tickers,
             start_date=config.DATA_START_DATE,
@@ -341,6 +348,12 @@ def run_walk_forward(
             api_key=config.FMP_API_KEY,
             api_delay=config.FMP_API_DELAY,
         )
+        from .data_fetcher import save_data_to_cache
+        save_data_to_cache(price_data, str(config.PRICE_DATA_CACHE))
+        logger.info(f"Saved to cache: {price_data.shape}")
+    else:
+        price_data = load_data_from_cache(str(config.PRICE_DATA_CACHE))
+        logger.info(f"Loaded from cache: {price_data.shape}")
 
     results = []
     oos_curves: List[pd.Series] = []  # for combined OOS equity curve

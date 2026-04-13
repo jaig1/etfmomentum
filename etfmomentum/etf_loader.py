@@ -82,6 +82,7 @@ def get_available_universes(etflist_dir: Path) -> Dict[str, str]:
         'sp500': 'sp500_sector_etfs.csv',
         'commodity': 'commodity_etfs.csv',
         'multi_asset': 'multi_asset_etfs.csv',
+        'factor': 'factor_etfs.csv',
     }
 
     for universe_name, filename in universe_files.items():
@@ -113,6 +114,7 @@ def load_universe_by_name(universe_name: str, etflist_dir: Path) -> Dict[str, st
         'sp500': 'sp500_sector_etfs.csv',
         'commodity': 'commodity_etfs.csv',
         'multi_asset': 'multi_asset_etfs.csv',
+        'factor': 'factor_etfs.csv',
     }
 
     if universe_name not in universe_files:

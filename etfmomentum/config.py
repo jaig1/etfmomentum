@@ -67,6 +67,11 @@ UNIVERSE_PARAMS = {
         "roc_lookback_days": 63,    # 3 months  — walk-forward consensus (4/6 windows)
         "top_n": 5,                 # walk-forward consensus (4/6 windows); wider TopN suits 12-ETF cross-asset universe
     },
+    "factor": {
+        "sma_lookback_days": 210,   # 10 months — walk-forward consensus (W5+W6 agree; mode across 6 windows)
+        "roc_lookback_days": 21,    # 1 month   — walk-forward consensus (5/6 windows)
+        "top_n": 3,                 # walk-forward consensus (4/6 windows)
+    },
 }
 
 # Backtest Parameters
