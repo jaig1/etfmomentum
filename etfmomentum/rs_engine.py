@@ -2,7 +2,7 @@
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List
+from typing import Dict, List, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -174,6 +174,73 @@ def apply_correlation_filter(
         return pd.DataFrame()
 
     return pd.DataFrame(selected_rows).reset_index(drop=True)
+
+
+def get_short_candidates(
+    signals: Dict[str, pd.DataFrame],
+    date: pd.Timestamp,
+    n: int = 2,
+    exclude_tickers: Optional[List[str]] = None,
+    qualification: str = 'both_filters',
+) -> pd.DataFrame:
+    """
+    Get bottom N ETFs ranked by momentum_quality ascending (worst trend first).
+
+    These are short candidates — smooth, persistent downtrends relative to SPY.
+    Mirror of get_qualifying_etfs() but inverted.
+
+    Args:
+        signals: Dictionary of signals DataFrames for each ETF
+        date: Date to evaluate
+        n: Maximum number of short candidates to return
+        exclude_tickers: Tickers already held long — skipped to avoid conflicts
+        qualification: 'both_filters' — must fail both rs_filter and abs_filter;
+                       'momentum_quality_only' — bottom N by score regardless of filters
+
+    Returns:
+        DataFrame sorted by momentum_quality ascending (worst trend first),
+        up to n rows. Empty DataFrame if no candidates qualify.
+    """
+    if exclude_tickers is None:
+        exclude_tickers = []
+
+    candidates = []
+
+    for ticker, df in signals.items():
+        if ticker in exclude_tickers:
+            continue
+        if date not in df.index:
+            continue
+
+        row = df.loc[date]
+
+        if pd.isna(row['momentum_quality']):
+            continue
+
+        if qualification == 'both_filters':
+            qualifies = not row['both_filters']
+        else:  # 'momentum_quality_only' — no filter gate, pure signal ranking
+            qualifies = True
+
+        if qualifies:
+            candidates.append({
+                'ticker': ticker,
+                'price': row['price'],
+                'rs_ratio': row['rs_ratio'],
+                'rs_roc': row['rs_roc'],
+                'momentum_quality': row['momentum_quality'],
+                'rs_filter': row['rs_filter'],
+                'abs_filter': row['abs_filter'],
+            })
+
+    if not candidates:
+        return pd.DataFrame()
+
+    df_candidates = pd.DataFrame(candidates)
+    # Ascending sort: most negative momentum quality = smoothest downtrend = best short
+    df_candidates = df_candidates.sort_values('momentum_quality', ascending=True).reset_index(drop=True)
+
+    return df_candidates.head(n)
 
 
 def calculate_sector_breadth(

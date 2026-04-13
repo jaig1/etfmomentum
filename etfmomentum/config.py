@@ -123,6 +123,25 @@ HIGH_VOL_TBILL_ETF = 'BIL'  # Short-term Treasury ETF (SGOV also works)
 HIGH_VOL_TBILL_ALLOCATION = 0.50  # 50% allocation in hybrid mode
 EXTREME_VOL_THRESHOLD = 0.35  # 35% annualized volatility for extreme regime
 
+# Short Selling (Hedge Sleeve)
+# Always-on short book: bottom N ETFs from the universe that fail both filters.
+# Adds 25% gross short on top of 100% long (125% gross total).
+# Closes automatically when the breadth filter triggers.
+ENABLE_SHORT_SELLING = True           # Master kill switch for short selling across all universes
+SHORT_ENABLED_UNIVERSES = ['emerging']  # Universes with short selling active; add more as validated
+
+# Per-universe short parameters — optimized independently per universe via short_optimizer.py.
+# Only universes listed in SHORT_ENABLED_UNIVERSES are active; entries here are ignored otherwise.
+# emerging params: validated via 72-combo grid search, 10yr + 19yr backtest (April 2026).
+SHORT_UNIVERSE_PARAMS = {
+    'emerging': {
+        'top_n':         3,                       # Bottom 3 ETFs shorted equally (11% each at 33% allocation)
+        'allocation':    0.33,                    # 33% gross short notional on top of 100% long (133% gross)
+        'stop_loss':     1.03,                    # Cover if price rises 3% above entry
+        'qualification': 'momentum_quality_only', # Bottom N by momentum quality; no filter gate required
+    },
+}
+
 # Correlation Filter (Anti-Overlap)
 # Prevents selecting highly correlated ETFs (e.g. SMH + XLK) in the same portfolio.
 # Greedy selection: take top-ranked, skip any candidate with rolling correlation

@@ -68,7 +68,7 @@ def run_single_backtest(
 
     try:
         # Run backtest using the current unified pipeline
-        strategy_df, benchmark_df, rebalance_log = run_backtest(
+        strategy_df, benchmark_df, rebalance_log, _short_stats = run_backtest(
             universe=universe,
             start_date=BACKTEST_START_DATE,
             end_date=BACKTEST_END_DATE,
