@@ -1,6 +1,6 @@
 # ETF Momentum Strategy — Comprehensive Overview
 
-*Last updated: April 12, 2026 | Version: 0.7.0 (multi-asset ETF universe)*
+*Last updated: April 12, 2026 | Version: 0.9.0 (bond ETF universe)*
 
 ---
 
@@ -17,6 +17,8 @@
 9. [Caveats and Risks](#9-caveats-and-risks)
 10. [Commodity Universe — Detailed Notes](#10-commodity-universe--detailed-notes)
 11. [Multi-Asset Universe — Detailed Notes](#11-multi-asset-universe--detailed-notes)
+12. [Factor ETF Universe — Detailed Notes](#12-factor-etf-universe--detailed-notes)
+13. [Bond ETF Universe — Detailed Notes](#13-bond-etf-universe--detailed-notes)
 
 ---
 
@@ -468,6 +470,75 @@ OOS/IS Sharpe decay ratio: **0.93** (robust — threshold is 0.70). Window 1 fai
 
 ---
 
+### Phase 12 — Multi-Asset Universe (April 12, 2026)
+
+*(See Section 11 for full details.)*
+
+**What was done (v0.7.0):** A fifth standalone universe — `multi_asset` — was added, covering cross-asset class rotation across 12 ETFs spanning US equities (SPY, IWM, QQQ), international equities (EFA, EEM), fixed income (TLT, IEF, LQD, HYG), real assets (GLD, VNQ), and commodities (DBC).
+
+**Walk-forward validated parameters:** SMA=6mo, ROC=3mo, TopN=5 (consensus 4/6 windows).
+
+**10-Year Performance (2016–2026-04-08):**
+
+| Metric | Strategy | SPY |
+|---|---|---|
+| Total Return | 470% | 238% |
+| Annualized Return | 18.54% | 12.58% |
+| Sharpe Ratio | 1.147 | 0.499 |
+| Max Drawdown | -13.27% | -34.1% |
+
+Walk-forward OOS: 270% combined return, Avg OOS Sharpe 0.623, decay ratio 0.78, only 2/6 windows beat SPY. The 2/6 beat rate is structural — SPY is both a universe member and the RS benchmark (circularity), and cross-asset rotation naturally lags in equity bull regimes. The strategy's value is drawdown protection, not equity alpha.
+
+**Version bump:** 0.6.0 → 0.7.0
+
+---
+
+### Phase 13 — Factor ETF Universe (April 12, 2026)
+
+*(See Section 12 for full details.)*
+
+**What was done (v0.8.0):** A sixth standalone universe — `factor` — was added, covering US equity factor rotation across 12 factor-tilted ETFs: IWF, IWD, IWM, IWO, IWN (Russell style), VUG, VTV (Vanguard style), USMV (low vol), SCHD (dividend), MTUM, QUAL, VLUE (factor ETFs).
+
+**Walk-forward validated parameters:** SMA=10mo, ROC=1mo, TopN=3 (ROC=1mo consensus 5/6 windows; overall params consensus W5+W6).
+
+**10-Year Performance (2016–2026-04-08):**
+
+| Metric | Strategy | SPY |
+|---|---|---|
+| Total Return | 258% | 236% |
+| Annualized Return | 13.27% | 12.58% |
+| Sharpe Ratio | 0.716 | 0.499 |
+| Max Drawdown | -20.37% | -34.1% |
+
+Walk-forward OOS: 249.4% combined return, Avg OOS Sharpe 0.542, decay ratio 0.87 (ROBUST), 3/6 windows beat SPY. The decay ratio of 0.87 is the second-best across all universes, indicating the factor signal generalises well out-of-sample. Raw returns are modest because `HIGH_VOL_SPY_MIN_ALLOCATION` forces SPY into ~55% of rebalance periods during high-volatility regimes, diluting the factor rotation signal.
+
+**Version bump:** 0.7.0 → 0.8.0
+
+---
+
+### Phase 14 — Bond ETF Universe (April 12, 2026)
+
+*(See Section 13 for full details.)*
+
+**What was done (v0.9.0):** A seventh standalone universe — `bond` — was added, covering fixed income rotation across 12 bond ETFs spanning Treasuries (TLT, IEF, SHY), credit (LQD, HYG), broad/specialty (AGG, TIP, MBB, MUB, BKLN), and international bonds (EMB, BWX).
+
+**Walk-forward validated parameters:** SMA=6mo, ROC=3mo, TopN=10 (most stable params across all universes — 6/6 window consensus on both SMA and ROC).
+
+**10-Year Performance (2016–2026-04-08):**
+
+| Metric | Strategy | SPY |
+|---|---|---|
+| Total Return | 127.5% | 236% |
+| Annualized Return | 8.36% | 12.58% |
+| Sharpe Ratio | 0.477 | 0.499 |
+| Max Drawdown | -18.61% | -34.1% |
+
+Walk-forward OOS: 169.4% combined return, Avg OOS Sharpe 0.330, decay ratio 0.58 (MODERATE), 0/6 windows beat SPY. The 0/6 beat rate is structural — this is a bond universe benchmarked against equities. The strategy's value is capital preservation (outperforms in 2018, 2020, 2022 equity bear years) and counter-cyclical diversification alongside equity universes. The correct benchmark is AGG, not SPY. 6/6 WF parameter consensus across all windows is the most stable of all seven universes.
+
+**Version bump:** 0.8.0 → 0.9.0
+
+---
+
 ## 4. Defensive Layers
 
 Four mechanisms provide capital protection, operating at different timescales and triggers:
@@ -529,7 +600,7 @@ The top 3 ranked parameter combinations are tightly clustered (Sharpe 0.652–0.
 
 ## 6. Universe Analysis
 
-Five universes are supported. Each has its own walk-forward validated parameters — the package resolves these automatically when a universe is specified. Third-party callers only need to pass the universe name.
+Seven universes are supported. Each has its own walk-forward validated parameters — the package resolves these automatically when a universe is specified. Third-party callers only need to pass the universe name.
 
 ### Validated Parameters Per Universe
 
@@ -540,6 +611,8 @@ Five universes are supported. Each has its own walk-forward validated parameters
 | `developed` | 26 | 168d (8mo) | 21d (1mo) | 3 | Walk-forward consensus (6/6 windows) |
 | `commodity` | 10 | 126d (6mo) | 126d (6mo) | 3 | Walk-forward consensus (6/6 windows) |
 | `multi_asset` | 12 | 126d (6mo) | 63d (3mo) | 5 | Walk-forward consensus (4/6 windows) |
+| `factor` | 12 | 210d (10mo) | 21d (1mo) | 3 | Walk-forward consensus (ROC=1mo 5/6 windows) |
+| `bond` | 12 | 126d (6mo) | 63d (3mo) | 10 | Walk-forward consensus (6/6 windows — most stable) |
 
 ### Performance Comparison (April 12, 2026)
 
@@ -547,33 +620,31 @@ Five universes are supported. Each has its own walk-forward validated parameters
 
 | Universe | Return | Ann. Return | Sharpe | MaxDD | vs SPY |
 |---|---|---|---|---|---|
-| SP500 | 901% | 25.24% | 1.316 | -11.8% | +663pp |
-| **Emerging** | **1,890%** | **33.89%** | **1.631** | -14.18% | +1,652pp |
-| Developed | 245% | 12.85% | 0.677 | -12.91% | +7pp |
+| SP500 | 769% | 23.51% | 1.266 | -11.83% | +531pp |
+| **Emerging** | **2,236%** | **36.04%** | **1.862** | -9.09% | +1,998pp |
+| Developed | 350% | 15.81% | 0.914 | -13.95% | +112pp |
 | **Commodity** | **5,204%** | **47.38%** | **1.861** | **-10.67%** | +4,966pp |
-| Multi-Asset | 470% | 18.54% | 1.147 | -13.05% | +232pp |
+| Multi-Asset | 470% | 18.54% | 1.147 | -13.27% | +232pp |
+| Factor | 258% | 13.27% | 0.716 | -20.37% | +20pp |
+| Bond | 128% | 8.36% | 0.477 | -18.61% | -110pp |
 | SPY (B&H) | 238% | 12.58% | 0.499 | -34.1% | — |
 
-**Max-History (2012–2026-04-08, commodity only):**
+**Max-History (longest honest backtest per universe):**
 
-| Universe | Return | Ann. Return | Sharpe | MaxDD | vs SPY |
+| Universe | Period | Return | Ann. Return | Sharpe | MaxDD |
 |---|---|---|---|---|---|
-| Commodity | 6,445% | 35.34% | 1.536 | -23.06% | +6,018pp |
-| SPY (B&H) | 427% | 12.79% | 0.533 | -34.1% | — |
+| SP500 | 2007–2026 (19yr) | 2,531% | 18.53% | 0.991 | -13.03% |
+| Emerging | 2007–2026 (19yr) | 16,320% | 30.36% | 1.426 | -18.51% |
+| Developed | 2007–2026 (19yr) | 827% | 12.27% | 0.603 | -19.06% |
+| Commodity | 2012–2026 (14yr) | 6,802% | 34.66% | 1.522 | -23.06% |
+| Multi-Asset | 2007–2026 (19yr) | 2,425% | 18.28% | 1.062 | -13.27% |
+| Factor | 2014–2026 (12yr) | 261% | 11.07% | 0.568 | -20.37% |
+| Bond | 2011–2026 (15yr) | 211% | 7.87% | 0.430 | -18.61% |
 
-Note: The 2012–2015 period captures the commodity secular bear (USD strength, China slowdown, oil crash), which widens MaxDD to -23% and reduces Sharpe from 1.861 to 1.536. The 10-year result starting 2016 is cleaner and reflects the full strategy with all defensive layers active.
-
-**19-Year (2007–2026):**
-
-| Universe | Return | Ann. Return | Sharpe | MaxDD | vs SPY |
-|---|---|---|---|---|---|
-| SP500 | 2,955% | 19.46% | 1.025 | -12.7% | +2,577pp |
-| **Emerging** | **16,320%** | **30.36%** | **1.426** | -18.51% | +15,940pp |
-| Developed | 827% | 12.27% | 0.603 | -19.06% | +447pp |
-| Multi-Asset | 2,425% | 18.28% | 1.062 | — | +2,047pp |
-| SPY (B&H) | 381% | 8.5% | 0.284 | -56.47% | — |
-
-*Commodity 19yr not shown — CPER (Copper, inception Nov 2011) limits the honest start to 2012.*
+Notes:
+- Commodity: CPER (Copper, inception Nov 2011) limits honest start to June 2012. The 2012–2015 commodity secular bear widens MaxDD to -23% vs -11% for the 10-year window.
+- Factor: MTUM/QUAL/VLUE inception circa 2013 limits honest start to early 2014.
+- Bond: MBB/MUB/BKLN all incepted 2007–2011; SHY/IEF/TLT/LQD have full history back to 2002+.
 
 **Walk-Forward OOS (6 windows):**
 
@@ -584,6 +655,8 @@ Note: The 2012–2015 period captures the commodity secular bear (USD strength, 
 | Developed | 210% | 0.420 | ~0.56 | 2/6 |
 | **Commodity** | **978%** | **1.000** | **0.93** | **5/6** |
 | Multi-Asset | 270% | 0.623 | ~0.78 | 2/6 |
+| Factor | 249% | 0.542 | **0.87** | 3/6 |
+| Bond | 169% | 0.330 | 0.58 | 0/6 |
 
 ### Why Parameters Differ Per Universe
 
@@ -603,13 +676,15 @@ Note: The 2012–2015 period captures the commodity secular bear (USD strength, 
 - Use `emerging` for highest return potential with slightly wider drawdowns (strongest walk-forward OOS)
 - Use `commodity` for inflation-regime and commodity-cycle exposure; highest 10yr Sharpe but regime-dependent (see Section 10)
 - Use `multi_asset` for cross-asset class rotation with drawdown protection; lower alpha vs equities but strong risk-adjusted returns (see Section 11)
+- Use `factor` for US equity factor rotation (value/growth/momentum/quality); best OOS decay ratio (0.87) but modest raw returns due to vol-regime SPY dilution (see Section 12)
+- Use `bond` as a **complement** to equity universes — provides counter-cyclical exposure in equity bear years (2018, 2020, 2022); correct standalone benchmark is AGG not SPY (see Section 13)
 - `developed` is the weakest universe; use only if there is a specific mandate for developed market exposure
 
 ---
 
 ## 7. Current Performance
 
-### Current Parameters (v0.7.0)
+### Current Parameters (v0.9.0)
 
 ```python
 # Global (shared across all universes)
@@ -629,39 +704,37 @@ UNIVERSE_PARAMS = {
     "developed":   { "sma_lookback_days": 168, "roc_lookback_days": 21,  "top_n": 3 },
     "commodity":   { "sma_lookback_days": 126, "roc_lookback_days": 126, "top_n": 3 },
     "multi_asset": { "sma_lookback_days": 126, "roc_lookback_days": 63,  "top_n": 5 },
+    "factor":      { "sma_lookback_days": 210, "roc_lookback_days": 21,  "top_n": 3 },
+    "bond":        { "sma_lookback_days": 126, "roc_lookback_days": 63,  "top_n": 10 },
 }
 ```
 
-### 10-Year Summary (2016–2026-04-08)
+### SP500 Universe — 10-Year Summary (2016–2026-04-08)
 
 | Metric | Strategy | SPY |
 |---|---|---|
-| Total Return | **901%** | 236% |
-| Annualized Return | **25.24%** | 12.58% |
-| Sharpe Ratio | **1.316** | 0.499 |
-| Max Drawdown | **-11.8%** | -34.1% |
-| $100k → | **$1.00M** | $336k |
-| Months beating SPY | 79 / 123 | — |
-| Years beating SPY | 9 / 10 | — |
+| Total Return | **769%** | 236% |
+| Annualized Return | **23.51%** | 12.58% |
+| Sharpe Ratio | **1.266** | 0.499 |
+| Max Drawdown | **-11.83%** | -34.1% |
+| $100k → | **$869k** | $336k |
 
-### 19-Year Summary (2007–2026-04-08)
+### SP500 Universe — 19-Year Summary (2007–2026-04-08)
 
 | Metric | Strategy | SPY |
 |---|---|---|
-| Total Return | **2,955%** | 378% |
-| Annualized Return | **19.46%** | 8.48% |
-| Sharpe Ratio | **1.025** | 0.283 |
-| Max Drawdown | **-12.7%** | -56.47% |
-| $100k → | **$3.06M** | $478k |
-| Months beating SPY | 146 / 231 | — |
-| Years beating SPY | 15 / 19 | — |
+| Total Return | **2,531%** | 378% |
+| Annualized Return | **18.53%** | 8.48% |
+| Sharpe Ratio | **0.991** | 0.283 |
+| Max Drawdown | **-13.03%** | -56.47% |
 
-### Walk-Forward Validation (OOS, 6 windows, 2014–2026)
+### SP500 Universe — Walk-Forward Validation (OOS, 6 windows, 2014–2026)
 
 | Metric | Result |
 |---|---|
 | Combined OOS Return | 576% |
 | Average OOS Sharpe | 0.891 |
+| OOS/IS Decay Ratio | ~0.87 |
 | Windows beating SPY | 5 / 6 |
 
 Walk-forward uses monthly rebalancing without vol regime switching, which structurally reduces OOS numbers relative to the weekly backtest. The 5/6 window beat rate and 576% OOS return confirm the signal generalises beyond the in-sample period.
@@ -713,7 +786,68 @@ Strong in inflation/commodity bull regimes (2020–2022, 2025–2026). Underperf
 | Total Return | **2,425%** | 381% |
 | Annualized Return | **18.28%** | 8.5% |
 | Sharpe Ratio | **1.062** | 0.284 |
+| Max Drawdown | -13.27% | -56.47% |
 | Years beating SPY | 10 / 19 | — |
+
+### Factor Universe — 10-Year Summary (2016–2026-04-08)
+
+| Metric | Strategy | SPY |
+|---|---|---|
+| Total Return | 258% | 236% |
+| Annualized Return | 13.27% | 12.58% |
+| Sharpe Ratio | 0.716 | 0.499 |
+| Max Drawdown | -20.37% | -34.1% |
+| Years beating SPY | 7 / 10 | — |
+
+### Factor Universe — Max-History Summary (2014–2026-04-08)
+
+| Metric | Strategy | SPY |
+|---|---|---|
+| Total Return | 261% | 270% |
+| Annualized Return | 11.07% | — |
+| Sharpe Ratio | 0.568 | — |
+| Max Drawdown | -20.37% | — |
+
+### Factor Universe — Walk-Forward OOS
+
+| Metric | Result |
+|---|---|
+| Combined OOS Return | 249% |
+| Average OOS Sharpe | 0.542 |
+| OOS/IS Decay Ratio | 0.87 (ROBUST) |
+| Windows beating SPY | 3 / 6 |
+
+Note: The factor universe walk-forward has the second-best OOS/IS decay ratio (0.87) across all universes, indicating the signal generalises well. Raw returns are constrained by `HIGH_VOL_SPY_MIN_ALLOCATION`, which forces SPY allocation in high-volatility regimes — roughly 55% of rebalances had forced SPY diluting the factor rotation signal.
+
+### Bond Universe — 10-Year Summary (2016–2026-04-08)
+
+| Metric | Strategy | AGG (bond benchmark) | SPY |
+|---|---|---|---|
+| Total Return | 128% | ~30% | 236% |
+| Annualized Return | 8.36% | — | 12.58% |
+| Sharpe Ratio | 0.477 | ~0.3 | 0.499 |
+| Max Drawdown | -18.61% | ~-18% | -34.1% |
+| Years beating SPY | 3 / 10 (2018, 2020, 2022) | — | — |
+
+### Bond Universe — Max-History Summary (2011–2026-04-08)
+
+| Metric | Strategy | SPY |
+|---|---|---|
+| Total Return | 211% | 408% |
+| Annualized Return | 7.87% | — |
+| Sharpe Ratio | 0.430 | — |
+| Max Drawdown | -18.61% | — |
+
+### Bond Universe — Walk-Forward OOS
+
+| Metric | Result |
+|---|---|
+| Combined OOS Return | 169% |
+| Average OOS Sharpe | 0.330 |
+| OOS/IS Decay Ratio | 0.58 (MODERATE) |
+| Windows beating SPY | 0 / 6 |
+
+Note: 0/6 beating SPY is structural — this is a bond universe benchmarked against equities. The 6/6 walk-forward parameter consensus (most stable of all universes) and consistent capital preservation in equity bear years are the signal quality indicators. Bond universe value: complement to equity rotations, not standalone alpha.
 
 ### Current Signals (April 2026)
 
@@ -743,6 +877,7 @@ Strong in inflation/commodity bull regimes (2020–2022, 2025–2026). Underperf
 | Module | Purpose |
 |---|---|
 | `optimizer.py` | 48-combination grid search |
+| `walk_forward.py` | Walk-forward validation (6 windows, 576 backtests per universe) |
 | `volatility_regime.py` | Regime detection and adaptive allocation |
 | `trading_frequency_analyzer.py` | Weekly vs monthly rebalancing analysis |
 | `defensive_strategy_tester.py` | Defensive mode comparison |
@@ -763,8 +898,10 @@ Strong in inflation/commodity bull regimes (2020–2022, 2025–2026). Underperf
 | `developed_market_etfs.csv` | `developed` | 26: EWJ, EWG, EWU, EWA, EWC, EWQ, EWL, EWP, EWI, EWN, EWD, EWK, EWS, EWH, ENOR, EDEN, EFNL, EIRL, EIS, EWGS, SCJ, EWUS, EWAS, HEWJ, HEWG, HEWU |
 | `commodity_etfs.csv` | `commodity` | 10: GLD, SLV, PPLT, PALL, DBC, DBB, BNO, UNG, CPER, CORN |
 | `multi_asset_etfs.csv` | `multi_asset` | 12: SPY, IWM, QQQ, EFA, EEM, TLT, IEF, LQD, HYG, GLD, VNQ, DBC |
+| `factor_etfs.csv` | `factor` | 12: IWF, IWD, IWM, IWO, IWN, VUG, VTV, USMV, SCHD, MTUM, QUAL, VLUE |
+| `bond_etfs.csv` | `bond` | 12: TLT, IEF, SHY, LQD, AGG, TIP, HYG, MBB, EMB, MUB, BKLN, BWX |
 
-XLRE and XLC are gracefully skipped for pre-inception dates. CPER (Copper) limits commodity backtest start to June 2012. HYG (April 2007) is the limiting ETF for multi_asset — backtest starts July 2007 after SMA warmup.
+XLRE and XLC are gracefully skipped for pre-inception dates. CPER (Copper) limits commodity backtest start to June 2012. HYG (April 2007) is the limiting ETF for multi_asset — backtest starts July 2007 after SMA warmup. MTUM/QUAL/VLUE (factor universe) limit honest backtest start to early 2014.
 
 ---
 
@@ -907,9 +1044,113 @@ etfs = run_signals('multi_asset', date=pd.Timestamp('2026-04-08'))
 
 ---
 
-*For current signals: `uv run python -m etfmomentum signal --universe sp500 --detailed --refresh`*
-*For emerging signals: `uv run python -m etfmomentum signal --universe emerging --detailed --refresh`*
-*For commodity signals: `uv run python -m etfmomentum signal --universe commodity --detailed --refresh`*
-*For multi-asset signals: `uv run python -m etfmomentum signal --universe multi_asset --detailed --refresh`*
-*For a backtest: `uv run python -m etfmomentum backtest --universe multi_asset --start-date 2016-01-01`*
+## 12. Factor ETF Universe — Detailed Notes
+
+### Universe Composition
+
+12 factor-tilted US equity ETFs across four factor categories:
+
+| Category | ETFs |
+|---|---|
+| Style (Russell large-cap) | IWF (Growth), IWD (Value) |
+| Style (Russell small-cap) | IWM (Broad), IWO (Growth), IWN (Value) |
+| Style (Vanguard) | VUG (Growth), VTV (Value) |
+| Factor tilts | USMV (Min Volatility), SCHD (Dividend), MTUM (Momentum), QUAL (Quality), VLUE (Value) |
+
+All ETFs are US equity, meaning this universe rotates within the equity factor spectrum rather than across asset classes. Performance is tightly correlated with broad equity market direction — factor rotation only adds alpha by being in the right factor regime.
+
+### SPY Vol-Regime Dilution
+
+The most significant constraint on factor universe returns is `HIGH_VOL_SPY_MIN_ALLOCATION`: when SPY 30-day annualized volatility exceeds 25%, a minimum 20% SPY allocation is forced. Because factor ETFs are by definition correlated with SPY (they are all subsets of the US equity market), high-volatility periods are common, and the forced SPY allocation entered ~55% of rebalance periods in backtesting.
+
+This is essentially forcing SPY into a factor universe — diluting the rotation signal significantly. An open improvement is to disable `HIGH_VOL_SPY_MIN_ALLOCATION` for the factor universe specifically, or replace it with a rotation to SGOV (cash) rather than SPY.
+
+### Regime Behaviour
+
+| Regime | Strategy Behaviour |
+|---|---|
+| Low-vol equity bull | Rotates into MTUM/IWF/VUG — growth/momentum factor dominates |
+| Value rotation | Rotates into IWD/VTV/VLUE — value factor captures mean-reversion cycles |
+| Risk-off / high vol | Rotates into USMV/SCHD — defensive factors; but SPY forced allocation dilutes this |
+| Small-cap bull | Rotates into IWM/IWO — small-cap outperformance cycles |
+
+### Walk-Forward Robustness
+
+The OOS/IS decay ratio of 0.87 is the second-best across all universes (behind emerging's 0.90), meaning the factor signal generalises well out-of-sample. The 3/6 windows beating SPY is constrained by vol-regime interference, not signal quality.
+
+### Third-Party Usage
+
+```python
+from etfmomentum import run_signals
+
+# Current signals (today)
+etfs = run_signals('factor')
+# e.g. ['IWF', 'MTUM', 'VUG']
+
+# Install
+# pip install git+https://github.com/jaig1/etfmomentum.git@v0.8.0
+```
+
+---
+
+## 13. Bond ETF Universe — Detailed Notes
+
+### Universe Composition
+
+12 bond ETFs across four segments:
+
+| Segment | ETFs |
+|---|---|
+| Treasury (duration spectrum) | TLT (20yr+), IEF (7-10yr), SHY (1-3yr) |
+| Credit | LQD (Investment Grade), HYG (High Yield) |
+| Broad / Specialty | AGG (Broad US Bond), TIP (TIPS), MBB (Mortgage-Backed), MUB (Municipal), BKLN (Senior Loans) |
+| International | EMB (Emerging Market Bonds USD), BWX (International Treasury ex-US) |
+
+The universe covers the full fixed income spectrum — duration rotation (long vs short Treasuries), credit rotation (IG vs HY vs loans), inflation protection (TIP), and international diversification.
+
+### Benchmark Note
+
+SPY is the package's default benchmark for RS ratio computation. For the bond universe, this creates a structural disadvantage: bond ETFs will nearly always show negative RS ratios vs SPY in equity bull regimes. The economically correct benchmark is AGG (Broad US Bond Market). The 0/6 WF windows beating SPY is a benchmark mismatch, not a signal failure.
+
+Using AGG as the benchmark would reveal which bond ETFs are outperforming the broad bond market — which is the actual investment question for a bond rotation strategy.
+
+### Regime Behaviour
+
+| Regime | Strategy Behaviour |
+|---|---|
+| Rising rates (equity bear) | Rotates into SHY/BKLN/BKLN (short duration) — protects vs rate risk |
+| Falling rates (recession) | Rotates into TLT/IEF (long duration) — captures bond rally |
+| Inflation spike | Rotates into TIP — real return protection |
+| Credit expansion | Rotates into HYG/LQD (higher yield) |
+| Risk-off / equity crash | Outperforms SPY — 2018 (+ve), 2020 (protective), 2022 (+ve vs SPY -19%) |
+
+### When to Use Bond Universe
+
+The bond universe is a **complement** to equity universes, not a standalone replacement. The pattern is clear: bond rotation beats SPY in exactly the years when equities are in bear markets (2018, 2020, 2022). This counter-cyclical characteristic makes it valuable in a multi-universe portfolio.
+
+Example allocation: 60% capital in `sp500` + 40% in `bond` would provide equity-like returns in bull markets with meaningful drawdown protection in bear years.
+
+### Parameter Stability
+
+Bond universe walk-forward validated 6/6 windows with the same optimal parameters (SMA=6mo, ROC=3mo) — the most stable of all seven universes. Bond trend dynamics are more predictable and less regime-sensitive at the parameter selection level (even if returns are regime-dependent).
+
+### Third-Party Usage
+
+```python
+from etfmomentum import run_signals
+
+# Current signals (today)
+etfs = run_signals('bond')
+# e.g. ['SHY', 'BKLN', 'TIP', 'MUB', 'LQD', 'AGG', 'MBB', 'IEF', 'TLT', 'HYG']
+
+# Install
+# pip install git+https://github.com/jaig1/etfmomentum.git@v0.9.0
+```
+
+---
+
+*Signals: `uv run python -m etfmomentum signal --universe <universe> --detailed --refresh`*
+*Available universes: `sp500`, `emerging`, `developed`, `commodity`, `multi_asset`, `factor`, `bond`*
+*Backtest: `uv run python -m etfmomentum backtest --universe <universe> --start-date 2016-01-01`*
+*Walk-forward: `uv run python -m etfmomentum walk-forward --universe <universe>`*
 *Web UI: `./start_api.sh` + `./start_ui.sh` → http://localhost:3000*
