@@ -1,0 +1,13 @@
+Ticker,ETF_Name,Issuer
+"IWF","Russell 1000 Growth","iShares (BlackRock)"
+"IWD","Russell 1000 Value","iShares (BlackRock)"
+"IWM","Russell 2000 Small Cap","iShares (BlackRock)"
+"IWO","Russell 2000 Growth","iShares (BlackRock)"
+"IWN","Russell 2000 Value","iShares (BlackRock)"
+"VUG","Vanguard Growth","Vanguard"
+"VTV","Vanguard Value","Vanguard"
+"USMV","Min Volatility","iShares (BlackRock)"
+"SCHD","Dividend Equity","Schwab"
+"MTUM","Momentum Factor","iShares (BlackRock)"
+"QUAL","Quality Factor","iShares (BlackRock)"
+"VLUE","Value Factor","iShares (BlackRock)"
