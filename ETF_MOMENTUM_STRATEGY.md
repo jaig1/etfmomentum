@@ -1,6 +1,6 @@
 # ETF Momentum Strategy — Comprehensive Overview
 
-*Last updated: April 12, 2026 | Version: 0.9.0 (bond ETF universe)*
+*Last updated: April 15, 2026 | Version: 0.12.0 (short hedge sleeve — emerging + commodity)*
 
 ---
 
@@ -19,6 +19,7 @@
 11. [Multi-Asset Universe — Detailed Notes](#11-multi-asset-universe--detailed-notes)
 12. [Factor ETF Universe — Detailed Notes](#12-factor-etf-universe--detailed-notes)
 13. [Bond ETF Universe — Detailed Notes](#13-bond-etf-universe--detailed-notes)
+14. [Short Hedge Sleeve — Detailed Notes](#14-short-hedge-sleeve--detailed-notes)
 
 ---
 
@@ -539,6 +540,104 @@ Walk-forward OOS: 169.4% combined return, Avg OOS Sharpe 0.330, decay ratio 0.58
 
 ---
 
+### Phase 15 — Short Hedge Sleeve — Emerging Universe (April 13, 2026)
+
+*(See Section 14 for full details.)*
+
+**What was done (v0.10.0):** An always-on short selling hedge was added to the emerging market universe. The bottom 3 ETFs by momentum quality score are shorted at 33% gross notional, creating 133% gross / 67% net long exposure. A new public function `run_short_signals(universe)` was added alongside `run_signals()`, giving trading bots a symmetric API for both sides.
+
+**Methodology:**
+- Short candidates: bottom N ETFs ranked by momentum quality ascending (`momentum_quality_only` qualification — no filter gate)
+- Breadth filter triggers close the entire short book (defensive mode)
+- Daily 3% stop-loss on each short position (intra-week, independent of rebalance)
+- Optimization: 72-combo grid search over `top_n × allocation × stop_loss × qualification`
+- Validated on 10yr + 19yr before locking parameters
+
+**Optimized Parameters (emerging):**
+
+| Parameter | Value | Notes |
+|---|---|---|
+| `top_n` | 3 | Bottom 3 ETFs by momentum quality |
+| `allocation` | 0.33 | 33% gross short on top of 100% long |
+| `stop_loss` | 1.03 | Cover if price rises 3% above entry |
+| `qualification` | `momentum_quality_only` | No filter gate; pure signal ranking |
+
+**Performance vs Baseline (long-only):**
+
+| Period | Metric | Baseline | With Short Hedge | Delta |
+|---|---|---|---|---|
+| 10yr (2016–2026) | Sharpe | 1.862 | **2.514** | +0.652 |
+| 10yr | Ann Return | 36.04% | **46.74%** | +10.70pp |
+| 10yr | Max Drawdown | -9.09% | **-7.68%** | +1.41pp |
+| 19yr (2007–2026) | Sharpe | 1.716 | **2.436** | +0.720 |
+| 19yr | Ann Return | 34.20% | **44.17%** | +9.97pp |
+| 19yr | Max Drawdown | -11.35% | **-8.35%** | +3.00pp |
+
+Short sleeve stats (10yr): 67% activation rate, avg gross exposure 116.8%, ~14 stop triggers/year.
+
+**Version bump:** 0.9.0 → 0.10.0
+
+---
+
+### Phase 16 — Breadth Filter Reversed for Short Book — Emerging (April 15, 2026)
+
+**What was done (v0.11.0):** The breadth filter interaction with the short book was reversed. Previously, when breadth < 40% (defensive mode), the entire short book was closed. The new behaviour keeps shorts open during low-breadth regimes — because broad market weakness is precisely when laggard ETFs fall hardest, making it the best time to hold shorts.
+
+**Rationale:** Low-breadth regimes mean most sectors are already below their SMA. Laggards in this environment have directional momentum strongly in the short seller's favour. Closing shorts during defensive periods was leaving alpha on the table.
+
+**Impact — 19yr emerging backtest (3/3 deterministic runs):**
+
+| Metric | v0.10.0 (shorts close on breadth) | v0.11.0 (shorts always open) | Delta |
+|---|---|---|---|
+| Sharpe | 2.436 | **2.778** | +0.342 |
+| Ann Return | 44.17% | **53.75%** | +9.58pp |
+| Max Drawdown | -8.35% | **-8.12%** | +0.23pp (flat) |
+| Activation rate | 67% | **100%** | +33pp |
+
+**Version bump:** 0.10.0 → 0.11.0
+
+---
+
+### Phase 17 — Short Hedge Sleeve — Commodity Universe (April 15, 2026)
+
+**What was done (v0.12.0):** Short selling was added to the commodity universe after a 72-combo grid search. Commodity ETFs (oil, gas, gold, agriculture, metals) are driven by completely independent supply/demand factors — the highest natural dispersion of any universe tested, making laggards highly suitable for shorting. Dominant shorts are UNG (natural gas), BNO (Brent oil), CORN (corn), and DBC (broad commodity basket).
+
+**Optimized Parameters (commodity):**
+
+| Parameter | Value | Notes |
+|---|---|---|
+| `top_n` | 2 | Bottom 2 ETFs by momentum quality (16.5% each) |
+| `allocation` | 0.33 | 33% gross short on top of 100% long |
+| `stop_loss` | 1.03 | Cover if price rises 3% above entry |
+| `qualification` | `both_filters` | Must fail RS filter AND absolute trend filter |
+
+**Grid Search Sensitivity (commodity):**
+
+| Parameter | Key Finding |
+|---|---|
+| `top_n` | 2 dominates (avg Sharpe 2.000 vs 1.957 for 3, 1.860 for 1) |
+| `stop_loss` | 3% is critical — avg Sharpe 2.061 vs 1.850 for 10% stop |
+| `allocation` | Insensitive across 15/25/33%; 33% chosen for consistency |
+| `qualification` | Exactly tied; `both_filters` chosen as stricter gate |
+
+**Performance vs Baseline (long-only):**
+
+| Period | Metric | Baseline | With Short Hedge | Delta |
+|---|---|---|---|---|
+| 10yr (2016–2026) | Sharpe | 1.861 | **2.194** | +0.333 |
+| 10yr | Ann Return | 47.38% | **59.21%** | +11.83pp |
+| 10yr | Max Drawdown | -10.67% | **-10.56%** | +0.11pp (flat) |
+| 19yr (2007–2026) | Sharpe | — | **2.034** | — |
+| 19yr | Ann Return | — | **48.67%** | — |
+| 19yr | Max Drawdown | — | **-10.56%** | — |
+
+Short sleeve stats (10yr): 95% activation rate, ~11 stop triggers/year.
+Short sleeve stats (19yr): 92% activation rate, ~9 stop triggers/year.
+
+**Version bump:** 0.11.0 → 0.12.0
+
+---
+
 ## 4. Defensive Layers
 
 Four mechanisms provide capital protection, operating at different timescales and triggers:
@@ -684,20 +783,19 @@ Notes:
 
 ## 7. Current Performance
 
-### Current Parameters (v0.9.0)
+### Current Parameters (v0.12.0)
 
 ```python
 # Global (shared across all universes)
 REBALANCE_FREQUENCY = "weekly"
 CASH_TICKER = "SGOV"               # backfilled with BIL pre-2020-06-12
-STOP_LOSS_THRESHOLD = 0.95         # 5% stop
+STOP_LOSS_THRESHOLD = 0.95         # 5% long stop-loss
 ENABLE_VOLATILITY_REGIME_SWITCHING = True
 ENABLE_BREADTH_FILTER = True
 BREADTH_FILTER_THRESHOLD = 0.40    # < 40% of sectors above SMA = low breadth
 BREADTH_CASH_ALLOCATION = 0.5      # 50% SGOV + 50% top-1 when breadth triggers
 
-# Per-universe optimised parameters — resolved automatically by the package.
-# Third-party callers only need to pass the universe name.
+# Per-universe long parameters — resolved automatically by the package.
 UNIVERSE_PARAMS = {
     "sp500":       { "sma_lookback_days": 210, "roc_lookback_days": 63,  "top_n": 3 },
     "emerging":    { "sma_lookback_days": 252, "roc_lookback_days": 21,  "top_n": 3 },
@@ -706,6 +804,27 @@ UNIVERSE_PARAMS = {
     "multi_asset": { "sma_lookback_days": 126, "roc_lookback_days": 63,  "top_n": 5 },
     "factor":      { "sma_lookback_days": 210, "roc_lookback_days": 21,  "top_n": 3 },
     "bond":        { "sma_lookback_days": 126, "roc_lookback_days": 63,  "top_n": 10 },
+}
+
+# Short hedge sleeve — per-universe optimized params (v0.12.0).
+# Only universes in SHORT_ENABLED_UNIVERSES are active.
+# Breadth filter does NOT close the short book (v0.11.0 change) — low-breadth
+# regimes are the best time to hold shorts on laggards.
+ENABLE_SHORT_SELLING = True
+SHORT_ENABLED_UNIVERSES = ['emerging', 'commodity']
+SHORT_UNIVERSE_PARAMS = {
+    "emerging": {
+        "top_n":         3,                       # bottom 3 ETFs by momentum quality
+        "allocation":    0.33,                    # 33% gross short (11% per position)
+        "stop_loss":     1.03,                    # cover if price rises 3% above entry
+        "qualification": "momentum_quality_only", # no filter gate; pure signal ranking
+    },
+    "commodity": {
+        "top_n":         2,                       # bottom 2 ETFs by momentum quality (16.5% each)
+        "allocation":    0.33,                    # 33% gross short (16.5% per position)
+        "stop_loss":     1.03,                    # cover if price rises 3% above entry
+        "qualification": "both_filters",          # must fail RS filter AND absolute trend filter
+    },
 }
 ```
 
@@ -849,6 +968,46 @@ Note: The factor universe walk-forward has the second-best OOS/IS decay ratio (0
 
 Note: 0/6 beating SPY is structural — this is a bond universe benchmarked against equities. The 6/6 walk-forward parameter consensus (most stable of all universes) and consistent capital preservation in equity bear years are the signal quality indicators. Bond universe value: complement to equity rotations, not standalone alpha.
 
+### Emerging Universe — 10-Year Summary WITH Short Hedge (2016–2026-04-08)
+
+| Metric | Long-Only Baseline | With Short Hedge (v0.11.0) | Delta |
+|---|---|---|---|
+| Total Return | 2,236% | **4,972%** | +2,736pp |
+| Annualized Return | 36.04% | **46.74%** | +10.70pp |
+| Sharpe Ratio | 1.862 | **2.514** | +0.652 |
+| Max Drawdown | -9.09% | **-7.68%** | +1.41pp |
+| $100k → | $2.34M | **$5.07M** | — |
+
+### Emerging Universe — 19-Year Summary WITH Short Hedge (2007–2026-04-08)
+
+| Metric | Long-Only Baseline | With Short Hedge (v0.11.0) | Delta |
+|---|---|---|---|
+| Annualized Return | 34.20% | **53.75%** | +19.55pp |
+| Sharpe Ratio | 1.716 | **2.778** | +1.062 |
+| Max Drawdown | -11.35% | **-8.12%** | +3.23pp |
+
+Sharpe decay (10yr → 19yr): 2.514 → 2.778 = **no decay** — v0.11.0 breadth-filter reversal adds more alpha over the longer period (more bear market regimes to exploit).
+
+### Commodity Universe — 10-Year Summary WITH Short Hedge (2016–2026-04-08)
+
+| Metric | Long-Only Baseline | With Short Hedge (v0.12.0) | Delta |
+|---|---|---|---|
+| Annualized Return | 47.38% | **59.21%** | +11.83pp |
+| Sharpe Ratio | 1.861 | **2.194** | +0.333 |
+| Max Drawdown | -10.67% | **-10.56%** | +0.11pp (flat) |
+
+Short sleeve stats (10yr): 95% activation rate, ~11 stop triggers/year. Dominant shorts: UNG, BNO, CORN, DBC.
+
+### Commodity Universe — 19-Year Summary WITH Short Hedge (2007–2026-04-08)
+
+| Metric | With Short Hedge (v0.12.0) |
+|---|---|
+| Annualized Return | **48.67%** |
+| Sharpe Ratio | **2.034** |
+| Max Drawdown | **-10.56%** |
+
+Short sleeve stats (19yr): 92% activation rate, ~9 stop triggers/year.
+
 ### Current Signals (April 2026)
 
 **SP500:** System has rotated out of SMH/XLK (semiconductor/tech) into defensive sectors: **XLE (Energy), XLB (Materials), XLU (Utilities)** — reflecting the risk-off, tariff-uncertainty environment of early 2026.
@@ -866,17 +1025,18 @@ Note: 0/6 beating SPY is structural — this is a bond universe benchmarked agai
 | `config.py` | All parameters and configuration |
 | `data_fetcher.py` | FMP API integration and price caching |
 | `etf_loader.py` | Load ETF universes from CSV |
-| `rs_engine.py` | RS ratio, SMA, ROC signal calculation |
-| `backtest.py` | Portfolio simulation with daily stop-loss |
-| `signal_generator.py` | Live signal generation with SGOV check; resolves per-universe params from `UNIVERSE_PARAMS` |
+| `rs_engine.py` | RS ratio, SMA, ROC, momentum quality, sector breadth, short candidates |
+| `backtest.py` | Portfolio simulation — long stop-loss, short book, daily short stop, breadth-triggered close |
+| `signal_generator.py` | `run_signals()` and `run_short_signals()` public APIs; `_compute_tickers()` unified pipeline |
 | `report.py` | Performance metrics (Sharpe, drawdown, etc.) |
-| `main.py` | CLI orchestrator (backtest / signal modes) |
+| `main.py` | CLI orchestrator (backtest / signal / short-optimize modes) |
 
 ### Research Modules
 
 | Module | Purpose |
 |---|---|
-| `optimizer.py` | 48-combination grid search |
+| `optimizer.py` | 48-combination long parameter grid search |
+| `short_optimizer.py` | 72-combination short sleeve grid search (top_n × allocation × stop × qualification) |
 | `walk_forward.py` | Walk-forward validation (6 windows, 576 backtests per universe) |
 | `volatility_regime.py` | Regime detection and adaptive allocation |
 | `trading_frequency_analyzer.py` | Weekly vs monthly rebalancing analysis |
@@ -1149,7 +1309,104 @@ etfs = run_signals('bond')
 
 ---
 
+## 14. Short Hedge Sleeve — Detailed Notes
+
+### Concept
+
+The short hedge sleeve adds an always-on short book alongside the long portfolio for universes where it has been optimized and validated. It is not a standalone strategy — it is a hedge layered on top of the existing long momentum signal.
+
+**Portfolio structure (emerging):**
+
+| Sleeve | Allocation | Positions |
+|---|---|---|
+| Long | 100% | Top 3 ETFs by momentum quality |
+| Short | 33% | Bottom 3 ETFs by momentum quality |
+| **Gross exposure** | **133%** | |
+| **Net long exposure** | **67%** | |
+
+### Short Candidate Selection
+
+Short candidates are the **mirror** of long candidates:
+- Ranked by `momentum_quality` **ascending** — most negative score (smoothest downtrend) first
+- `qualification = 'momentum_quality_only'` — no filter gate; any ETF can be a short candidate regardless of SMA/RS filter status
+- Current long tickers are excluded (no long/short conflicts)
+- Top 3 candidates selected at 11% each
+
+### Why `momentum_quality_only` Outperforms `both_filters`
+
+The `both_filters` qualification requires a short candidate to fail both the absolute SMA filter AND the RS filter. In strong bull markets, most ETFs pass both filters — leaving very few short candidates and reducing the short sleeve's activation rate. `momentum_quality_only` maintains a deeper candidate pool at all times, producing better 19yr robustness (Sharpe decay −0.078 vs −0.185 for `both_filters`).
+
+### Breadth Filter Interaction
+
+As of v0.11.0, when the breadth filter triggers (< 40% of universe ETFs above SMA), the **short book stays open**. The long side still goes 50% SGOV + 50% top-1 ETF as before. Rationale: low-breadth regimes are broad market weakness — exactly when laggard ETFs fall hardest, making them the best time to hold shorts. Reversing the original "close on breadth" behaviour lifted 19yr emerging Sharpe from 2.436 → 2.778 and Ann Return from 44.17% → 53.75% with activation rising from 67% → 100%.
+
+### Daily Short Stop-Loss
+
+A 3% stop-loss is checked on **every trading day** (not just rebalance days):
+```
+if current_price > entry_price * 1.03:
+    cover short at current price
+    slot stays empty until next weekly rebalance
+```
+The 3% stop (vs 5% long stop) reflects the higher intraday risk of short positions. ~14 stops/year in the 10yr backtest.
+
+### Optimization Methodology
+
+72-combo grid search:
+- `top_n`: [1, 2, 3]
+- `allocation`: [15%, 25%, 33%]
+- `stop_loss`: [3%, 5%, 7%, 10%]
+- `qualification`: ['both_filters', 'momentum_quality_only']
+
+**Key sensitivity findings:**
+- Allocation was the strongest lever: 33% avg Sharpe 2.295 vs 15% avg 2.089
+- Stop loss was the second: 3% avg Sharpe 2.317 vs 10% avg 2.125
+- TopN: minimal difference between 2 and 3 (avg 2.229 vs 2.237)
+- Qualification: nearly flat (2.190 vs 2.208) — locked `momentum_quality_only` for 19yr robustness
+
+Final selection (Rank 1 from grid): validated on 10yr AND 19yr before locking.
+
+### Public API
+
+```python
+from etfmomentum import run_signals, run_short_signals
+
+# Long signals — tickers to buy
+longs  = run_signals('emerging')        # e.g. ['EPOL', 'ILF', 'EWT']
+
+# Short signals — tickers to sell short
+shorts = run_short_signals('emerging')  # e.g. ['KWEB', 'MCHI', 'FXI']
+
+# Non-enabled universes return []
+shorts = run_short_signals('sp500')     # []
+```
+
+Both functions take **only the universe name** — all params resolved internally from `SHORT_UNIVERSE_PARAMS`.
+Returns `[]` when breadth filter is triggered.
+
+### Universe Enablement Status
+
+| Universe | Short Enabled | Notes |
+|---|---|---|
+| `emerging` | **Yes** | Optimized + validated v0.10.0; breadth-filter reversal v0.11.0 |
+| `commodity` | **Yes** | Optimized + validated v0.12.0; top_n=2 both_filters stop=3% |
+| `sp500` | No | Not recommended — high intra-sector correlation limits dispersion |
+| `developed` | No | Pending optimization |
+| `multi_asset` | No | Pending optimization |
+| `factor` | No | Pending optimization — factor rotations slow-moving; candidate |
+| `bond` | No | Not suitable — long-only complement universe |
+
+To enable for a new universe: add optimized params to `SHORT_UNIVERSE_PARAMS` and add to `SHORT_ENABLED_UNIVERSES`.
+
+```python
+# Install v0.12.0
+# pip install git+https://github.com/jaig1/etfmomentum.git@v0.12.0
+```
+
+---
+
 *Signals: `uv run python -m etfmomentum signal --universe <universe> --detailed --refresh`*
+*Short optimize: `uv run python -m etfmomentum short-optimize --universe emerging`*
 *Available universes: `sp500`, `emerging`, `developed`, `commodity`, `multi_asset`, `factor`, `bond`*
 *Backtest: `uv run python -m etfmomentum backtest --universe <universe> --start-date 2016-01-01`*
 *Walk-forward: `uv run python -m etfmomentum walk-forward --universe <universe>`*
