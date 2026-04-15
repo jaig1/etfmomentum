@@ -312,33 +312,30 @@ def run_backtest(
             )
 
             if short_active:
-                # Check breadth — close all shorts when breadth filter triggers
+                # Check breadth — short book stays open even when breadth filter fires
                 price_slice = price_data[price_data.index <= date]
                 breadth = calculate_sector_breadth(price_slice, etf_tickers, params["sma_lookback_days"])
                 breadth_triggered = breadth < config.BREADTH_FILTER_THRESHOLD
 
-                if not breadth_triggered:
-                    short_tickers = _run_short_signals_with_data(
-                        universe=universe,
-                        price_data=price_data,
-                        date=date,
-                        long_tickers=selected_tickers,
-                        n=short_params['top_n'],
-                    )
-                    if short_tickers:
-                        # Weight each short equally using per-universe allocation
-                        short_weight = short_params['allocation'] / short_params['top_n']
-                        for ticker in short_tickers:
-                            new_short_holdings[ticker] = short_weight
-                            if ticker in short_entry_prices:
-                                # Existing short — preserve entry price (no reset on hold)
-                                new_short_entry_prices[ticker] = short_entry_prices[ticker]
-                            elif ticker in price_data.columns and pd.notna(price_data.loc[date, ticker]):
-                                # New short — record entry price
-                                new_short_entry_prices[ticker] = price_data.loc[date, ticker]
-                    logger.info(f"Short book on {date.date()}: {list(new_short_holdings.keys()) or 'none'} (breadth={breadth:.1%})")
-                else:
-                    logger.info(f"Breadth triggered on {date.date()} ({breadth:.1%}) — short book closed")
+                short_tickers = _run_short_signals_with_data(
+                    universe=universe,
+                    price_data=price_data,
+                    date=date,
+                    long_tickers=selected_tickers,
+                    n=short_params['top_n'],
+                )
+                if short_tickers:
+                    # Weight each short equally using per-universe allocation
+                    short_weight = short_params['allocation'] / short_params['top_n']
+                    for ticker in short_tickers:
+                        new_short_holdings[ticker] = short_weight
+                        if ticker in short_entry_prices:
+                            # Existing short — preserve entry price (no reset on hold)
+                            new_short_entry_prices[ticker] = short_entry_prices[ticker]
+                        elif ticker in price_data.columns and pd.notna(price_data.loc[date, ticker]):
+                            # New short — record entry price
+                            new_short_entry_prices[ticker] = price_data.loc[date, ticker]
+                logger.info(f"Short book on {date.date()}: {list(new_short_holdings.keys()) or 'none'} (breadth={breadth:.1%}, breadth_triggered={breadth_triggered})")
             else:
                 breadth_triggered = False
 
