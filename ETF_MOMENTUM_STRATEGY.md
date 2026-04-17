@@ -1,6 +1,6 @@
 # ETF Momentum Strategy — Comprehensive Overview
 
-*Last updated: April 15, 2026 | Version: 0.12.0 (short hedge sleeve — emerging + commodity)*
+*Last updated: April 17, 2026 | Version: 0.13.0 (short hedge sleeve — emerging + commodity + sp500; short pipeline hardening)*
 
 ---
 
@@ -20,6 +20,7 @@
 12. [Factor ETF Universe — Detailed Notes](#12-factor-etf-universe--detailed-notes)
 13. [Bond ETF Universe — Detailed Notes](#13-bond-etf-universe--detailed-notes)
 14. [Short Hedge Sleeve — Detailed Notes](#14-short-hedge-sleeve--detailed-notes)
+15. [SP500 Short Sleeve — Detailed Notes](#15-sp500-short-sleeve--detailed-notes)
 
 ---
 
@@ -638,6 +639,85 @@ Short sleeve stats (19yr): 92% activation rate, ~9 stop triggers/year.
 
 ---
 
+### Phase 18 — Short Pipeline Hardening: Directional Gate + Correlation Filter (April 17, 2026)
+
+**What was done (v0.13.0):** Two additional filters were added to the short candidate selection pipeline, applied to all short-enabled universes.
+
+**Change 1 — Directional Gate:**
+
+After scoring and ranking candidates by momentum quality, a hard directional gate is applied before final selection. A candidate must satisfy *both*:
+- `price < SMA` — in confirmed absolute downtrend
+- `rs_roc < 0` — RS ratio is declining vs SPY (falling relative to the market)
+
+Previously, the `momentum_quality_only` qualification could select ETFs that were weak on a relative basis but not in absolute downtrend (e.g. a sector lagging SPY in a rising market). These candidates were suboptimal shorts because they lacked directional price momentum. The gate ensures every short has wind at its back before entry.
+
+**Change 2 — Correlation Filter on Short Pool:**
+
+The same greedy correlation filter used on the long side (60-day rolling return correlation, 0.85 threshold) is now applied to the short candidate pool. If two laggard candidates have >0.85 rolling correlation, only the weaker one is selected. This prevents doubling up on two ETFs driven by the same macro factor (e.g. XLE and XLB both weak in an energy/materials downturn) and keeps the short book diversified.
+
+**Implementation change:** `get_short_candidates()` in `rs_engine.py` gains a `pool_size` parameter. Callers can request a larger pool for downstream filtering, allowing the correlation filter to fill final slots from the 4th/5th ranked candidate if top candidates are correlated.
+
+**Impact on existing universes (directional gate makes `both_filters` ≈ `momentum_quality_only`):**
+
+In practice, the directional gate makes the two qualification modes converge — any candidate passing the directional gate (`price < SMA AND rs_roc < 0`) is already in an absolute downtrend with deteriorating RS. This removes the distinction between `both_filters` and `momentum_quality_only` in most market conditions.
+
+**Version bump:** 0.12.0 → 0.13.0 (combined with Phase 19)
+
+---
+
+### Phase 19 — Short Hedge Sleeve: SP500 Universe (April 17, 2026)
+
+*(See Section 15 for full details.)*
+
+**What was done (v0.13.0):** Short selling was added to the SP500 universe after a 72-combo grid search. The sector universe (12 ETFs: 11 SPDR sectors + SMH) rewards a single concentrated short against the weakest sector. The short is always-on — it fires in 82% of weeks — and particularly powerful in sector bear phases (2008, 2022).
+
+**Key finding vs emerging and commodity:** `top_n=1` dominates in the SP500 universe. Sectors are more correlated than country ETFs or commodities; adding a second short typically introduces a correlated bet rather than independent alpha. The grid search confirmed top_n=1 avg Sharpe 1.377 vs 1.342/1.350 for top_n=2/3.
+
+**Optimized Parameters (sp500):**
+
+| Parameter | Value | Notes |
+|---|---|---|
+| `top_n` | 1 | Single worst sector (33% gross short; one concentrated position) |
+| `allocation` | 0.33 | 33% gross short on top of 100% long (133% gross) |
+| `stop_loss` | 1.03 | Cover if price rises 3% above entry |
+| `qualification` | `both_filters` | Tied with `momentum_quality_only` after directional gate; stricter gate chosen |
+
+**Grid Search Sensitivity (sp500):**
+
+| Parameter | Key Finding |
+|---|---|
+| `top_n` | 1 dominates — avg Sharpe 1.377 vs 1.342 (2), 1.350 (3) |
+| `stop_loss` | 3% decisive — avg Sharpe 1.488 (3%) vs 1.267 (10%) |
+| `allocation` | Marginally insensitive; 33% best, 25% close |
+| `qualification` | Exactly tied; `both_filters` chosen as stricter gate |
+
+**Performance vs Baseline (long-only):**
+
+| Period | Metric | Baseline | With Short Hedge | Delta |
+|---|---|---|---|---|
+| 10yr (2016–2026) | Sharpe | 1.266 | **1.626** | +0.360 |
+| 10yr | Ann Return | 23.51% | **28.70%** | +5.19pp |
+| 10yr | Max Drawdown | -11.83% | **-8.09%** | +3.74pp tighter |
+| 10yr | Total Return | 769% | **1,224%** | — |
+| 19yr (2007–2026) | Sharpe | ~0.991 | **1.397** | — |
+| 19yr | Ann Return | ~18.5% | **25.06%** | — |
+| 19yr | Max Drawdown | -13.03% | **-8.52%** | +4.51pp tighter |
+| 19yr | Total Return | 2,531% | **7,272%** | — |
+
+Short sleeve stats (10yr): 82% activation rate, 62 stop triggers (~6.2/yr). Dominant shorts: XLU, XLE, XLB (defensive and cyclical laggards).
+
+**Standout years:**
+
+| Year | Strategy | SPY | Delta |
+|---|---|---|---|
+| 2008 | +21.1% | -38.3% | **+59.4pp** |
+| 2022 | +39.9% | -19.5% | **+59.4pp** |
+| 2020 | +66.4% | +16.2% | +50.2pp |
+
+**Version bump:** 0.12.0 → 0.13.0
+
+---
+
 ## 4. Defensive Layers
 
 Four mechanisms provide capital protection, operating at different timescales and triggers:
@@ -783,7 +863,7 @@ Notes:
 
 ## 7. Current Performance
 
-### Current Parameters (v0.12.0)
+### Current Parameters (v0.13.0)
 
 ```python
 # Global (shared across all universes)
@@ -806,12 +886,14 @@ UNIVERSE_PARAMS = {
     "bond":        { "sma_lookback_days": 126, "roc_lookback_days": 63,  "top_n": 10 },
 }
 
-# Short hedge sleeve — per-universe optimized params (v0.12.0).
+# Short hedge sleeve — per-universe optimized params (v0.13.0).
 # Only universes in SHORT_ENABLED_UNIVERSES are active.
 # Breadth filter does NOT close the short book (v0.11.0 change) — low-breadth
 # regimes are the best time to hold shorts on laggards.
+# Short pipeline (v0.13.0): directional gate (price < SMA AND rs_roc < 0) +
+# correlation filter applied to all short candidate pools before final selection.
 ENABLE_SHORT_SELLING = True
-SHORT_ENABLED_UNIVERSES = ['emerging', 'commodity']
+SHORT_ENABLED_UNIVERSES = ['emerging', 'commodity', 'sp500']
 SHORT_UNIVERSE_PARAMS = {
     "emerging": {
         "top_n":         3,                       # bottom 3 ETFs by momentum quality
@@ -825,27 +907,37 @@ SHORT_UNIVERSE_PARAMS = {
         "stop_loss":     1.03,                    # cover if price rises 3% above entry
         "qualification": "both_filters",          # must fail RS filter AND absolute trend filter
     },
+    "sp500": {
+        "top_n":         1,                       # single worst sector (33% per position)
+        "allocation":    0.33,                    # 33% gross short on top of 100% long (133% gross)
+        "stop_loss":     1.03,                    # cover if price rises 3% above entry
+        "qualification": "both_filters",          # tied with momentum_quality_only; stricter gate chosen
+    },
 }
 ```
 
-### SP500 Universe — 10-Year Summary (2016–2026-04-08)
+### SP500 Universe — 10-Year Summary WITH Short Hedge (2016–2026-04-08)
 
-| Metric | Strategy | SPY |
-|---|---|---|
-| Total Return | **769%** | 236% |
-| Annualized Return | **23.51%** | 12.58% |
-| Sharpe Ratio | **1.266** | 0.499 |
-| Max Drawdown | **-11.83%** | -34.1% |
-| $100k → | **$869k** | $336k |
+| Metric | Long-Only Baseline | With Short Hedge (v0.13.0) | Delta |
+|---|---|---|---|
+| Total Return | 769% | **1,224%** | +455pp |
+| Annualized Return | 23.51% | **28.70%** | +5.19pp |
+| Sharpe Ratio | 1.266 | **1.626** | +0.360 |
+| Max Drawdown | -11.83% | **-8.09%** | +3.74pp tighter |
+| $100k → | $869k | **$1.32M** | — |
+| Win rate (years) | — | 7/10 | — |
 
-### SP500 Universe — 19-Year Summary (2007–2026-04-08)
+Short sleeve stats (10yr): 82% activation rate, ~6.2 stop triggers/year.
 
-| Metric | Strategy | SPY |
-|---|---|---|
-| Total Return | **2,531%** | 378% |
-| Annualized Return | **18.53%** | 8.48% |
-| Sharpe Ratio | **0.991** | 0.283 |
-| Max Drawdown | **-13.03%** | -56.47% |
+### SP500 Universe — 19-Year Summary WITH Short Hedge (2007–2026-04-08)
+
+| Metric | Long-Only Baseline | With Short Hedge (v0.13.0) | Delta |
+|---|---|---|---|
+| Total Return | 2,531% | **7,272%** | — |
+| Annualized Return | 18.53% | **25.06%** | +6.53pp |
+| Sharpe Ratio | 0.991 | **1.397** | +0.406 |
+| Max Drawdown | -13.03% | **-8.52%** | +4.51pp tighter |
+| Win rate (years) | — | 14/19 | — |
 
 ### SP500 Universe — Walk-Forward Validation (OOS, 6 windows, 2014–2026)
 
@@ -1326,15 +1418,19 @@ The short hedge sleeve adds an always-on short book alongside the long portfolio
 
 ### Short Candidate Selection
 
-Short candidates are the **mirror** of long candidates:
-- Ranked by `momentum_quality` **ascending** — most negative score (smoothest downtrend) first
-- `qualification = 'momentum_quality_only'` — no filter gate; any ETF can be a short candidate regardless of SMA/RS filter status
-- Current long tickers are excluded (no long/short conflicts)
-- Top 3 candidates selected at 11% each
+Short candidates are the **mirror** of long candidates. The pipeline (v0.13.0) is:
 
-### Why `momentum_quality_only` Outperforms `both_filters`
+1. **Score and rank** all non-long ETFs by `momentum_quality` ascending (most negative = smoothest downtrend first)
+2. **Fetch a pool** larger than `top_n` to give downstream filters room to fill slots from lower-ranked candidates
+3. **Apply directional gate** — keep only candidates where `price < SMA` AND `rs_roc < 0` (confirmed absolute downtrend with deteriorating RS momentum)
+4. **Apply correlation filter** — greedy selection: skip any candidate with 60-day return correlation > 0.85 vs already-selected shorts
+5. **Select final top_n** from filtered pool
 
-The `both_filters` qualification requires a short candidate to fail both the absolute SMA filter AND the RS filter. In strong bull markets, most ETFs pass both filters — leaving very few short candidates and reducing the short sleeve's activation rate. `momentum_quality_only` maintains a deeper candidate pool at all times, producing better 19yr robustness (Sharpe decay −0.078 vs −0.185 for `both_filters`).
+Current long tickers are excluded at step 1 (no long/short conflicts).
+
+### Why `momentum_quality_only` and `both_filters` Now Converge
+
+As of v0.13.0, the directional gate is applied universally in the pipeline regardless of `qualification`. Any candidate that passes the gate (`price < SMA AND rs_roc < 0`) is already in an absolute downtrend with deteriorating RS — fulfilling the intent of `both_filters`. In practice, the two qualification modes produce identical results under most market conditions. `both_filters` is retained as the stricter gate for new universes (sp500, commodity); `momentum_quality_only` is kept for emerging where it was validated with a deeper 28-ETF candidate pool.
 
 ### Breadth Filter Interaction
 
@@ -1373,40 +1469,129 @@ from etfmomentum import run_signals, run_short_signals
 
 # Long signals — tickers to buy
 longs  = run_signals('emerging')        # e.g. ['EPOL', 'ILF', 'EWT']
+longs  = run_signals('sp500')           # e.g. ['SMH', 'XLF', 'XLC']
+longs  = run_signals('commodity')       # e.g. ['GLD', 'DBC', 'PPLT']
 
 # Short signals — tickers to sell short
 shorts = run_short_signals('emerging')  # e.g. ['KWEB', 'MCHI', 'FXI']
+shorts = run_short_signals('commodity') # e.g. ['UNG', 'BNO']
+shorts = run_short_signals('sp500')     # e.g. ['XLU']  — single position
 
-# Non-enabled universes return []
-shorts = run_short_signals('sp500')     # []
+# Non-enabled universes always return []
+shorts = run_short_signals('developed')   # []
+shorts = run_short_signals('bond')        # []
+shorts = run_short_signals('factor')      # []
+shorts = run_short_signals('multi_asset') # []
 ```
 
 Both functions take **only the universe name** — all params resolved internally from `SHORT_UNIVERSE_PARAMS`.
-Returns `[]` when breadth filter is triggered.
+Returns `[]` when no qualifying candidates pass the directional gate or when `ENABLE_SHORT_SELLING = False`.
 
 ### Universe Enablement Status
 
-| Universe | Short Enabled | Notes |
-|---|---|---|
-| `emerging` | **Yes** | Optimized + validated v0.10.0; breadth-filter reversal v0.11.0 |
-| `commodity` | **Yes** | Optimized + validated v0.12.0; top_n=2 both_filters stop=3% |
-| `sp500` | No | Not recommended — high intra-sector correlation limits dispersion |
-| `developed` | No | Pending optimization |
-| `multi_asset` | No | Pending optimization |
-| `factor` | No | Pending optimization — factor rotations slow-moving; candidate |
-| `bond` | No | Not suitable — long-only complement universe |
+| Universe | Short Enabled | Params | Notes |
+|---|---|---|---|
+| `emerging` | **Yes** | top_n=3, alloc=33%, stop=3%, `momentum_quality_only` | Optimized v0.10.0; breadth-filter reversal v0.11.0; Sharpe 2.778 (19yr) |
+| `commodity` | **Yes** | top_n=2, alloc=33%, stop=3%, `both_filters` | Optimized v0.12.0; Sharpe 2.194 (10yr) |
+| `sp500` | **Yes** | top_n=1, alloc=33%, stop=3%, `both_filters` | Optimized v0.13.0; Sharpe 1.626 (10yr); single worst sector |
+| `developed` | No | — | Pending optimization |
+| `multi_asset` | No | — | Pending optimization |
+| `factor` | No | — | Candidate — slow factor rotations may reward shorting |
+| `bond` | No | — | Not suitable — long-only complement universe |
 
-To enable for a new universe: add optimized params to `SHORT_UNIVERSE_PARAMS` and add to `SHORT_ENABLED_UNIVERSES`.
+To enable for a new universe: run `short-optimize --universe <name>`, validate on 10yr + 19yr, then add optimized params to `SHORT_UNIVERSE_PARAMS` and add to `SHORT_ENABLED_UNIVERSES`.
 
 ```python
-# Install v0.12.0
-# pip install git+https://github.com/jaig1/etfmomentum.git@v0.12.0
+# Install v0.13.0
+# pip install git+https://github.com/jaig1/etfmomentum.git@v0.13.0
 ```
 
 ---
 
+## 15. SP500 Short Sleeve — Detailed Notes
+
+### Concept
+
+The SP500 short sleeve shorts the **single weakest sector** at any rebalance point. Unlike emerging (top_n=3) and commodity (top_n=2), concentration at one position is optimal because the 12 SPDR sector ETFs are more correlated than country ETFs or independent commodity markets. Adding a second short typically introduces a correlated bet rather than diversified alpha.
+
+**Portfolio structure (sp500 with short sleeve):**
+
+| Sleeve | Allocation | Positions |
+|---|---|---|
+| Long | 100% | Top 3 sectors by momentum quality |
+| Short | 33% | Bottom 1 sector by momentum quality |
+| **Gross exposure** | **133%** | |
+| **Net long exposure** | **67%** | |
+
+### Sector Dynamics That Enable Shorting
+
+S&P 500 sector ETFs exhibit persistent underperformance cycles driven by macro and structural forces:
+
+| Laggard type | Example periods | Typical short candidates |
+|---|---|---|
+| Interest-rate-sensitive (rising rates) | 2022 | XLU, XLRE |
+| Cyclical bear / recession | 2008–2009 | XLF, XLY, XLB |
+| Energy bear (low oil) | 2014–2016 | XLE |
+| Tech bear | 2022 (partial) | XLK, SMH |
+
+These are not short-term dips — sector underperformance cycles typically last multiple quarters, which is why an always-on weekly short book with a 3% stop-loss works well.
+
+### Correlation Structure and Why `top_n=1`
+
+The SP500 sector ETFs have high pairwise correlations — typically 0.60–0.85 for adjacent sectors (XLK/SMH, XLB/XLE). The correlation filter will often block a second short candidate if it is highly correlated with the first. Testing confirmed that `top_n=2` rarely produces genuinely independent two-position short books; most weeks the second slot is either blocked by the correlation filter or marginally helpful.
+
+**Grid search confirmation:**
+
+| top_n | Avg Sharpe (10yr) |
+|---|---|
+| 1 | **1.377** |
+| 2 | 1.342 |
+| 3 | 1.350 |
+
+### Stop-Loss Behaviour
+
+The 3% stop-loss fires ~6.2 times per year in the 10-year backtest (62 total triggers). This is significantly fewer than emerging (~14/yr) or commodity (~11/yr), reflecting the lower volatility of sector ETFs vs country ETFs and individual commodities.
+
+The stop fires when: `current_price > entry_price * 1.03` (price rises 3% against the short). This is checked daily, independent of the weekly rebalance cycle.
+
+### Directional Gate Impact
+
+The directional gate (`price < SMA AND rs_roc < 0`) ensures the shorted sector is not only a relative laggard but is in confirmed absolute downtrend with deteriorating RS momentum. This prevents shorting a sector that is merely below average in a broadly rising market — one of the primary sources of short whipsaws.
+
+With the gate applied, `both_filters` and `momentum_quality_only` effectively converge for sp500 (tied in grid search), validating that the gate is doing the filtering work that `both_filters` was designed to do.
+
+### Third-Party Usage
+
+```python
+from etfmomentum import run_signals, run_short_signals
+
+# Weekly rebalance — SP500
+longs  = run_signals('sp500')        # e.g. ['SMH', 'XLF', 'XLC']
+shorts = run_short_signals('sp500')  # e.g. ['XLU']   (0 or 1 ticker)
+
+# Position sizing:
+#   Long:  33.3% per position (3 positions = 100%)
+#   Short: 33.0% single position
+#   Gross: 133% | Net long: 67%
+
+# Stop-loss (bot's responsibility, check daily):
+#   Long:  cover if price < entry * 0.95  (5% stop)
+#   Short: cover if price > entry * 1.03  (3% stop)
+```
+
+### Performance Reference
+
+| Period | Sharpe | Ann Return | MaxDD | Total Return | vs SPY |
+|---|---|---|---|---|---|
+| 10yr (2016–2026) | **1.626** | 28.70% | -8.09% | 1,224% | +988pp |
+| 19yr (2007–2026) | **1.397** | 25.06% | -8.52% | 7,272% | +6,894pp |
+
+Activation rate 82%; all bear-market years strongly positive (2008: +21%, 2022: +40%).
+
+---
+
 *Signals: `uv run python -m etfmomentum signal --universe <universe> --detailed --refresh`*
-*Short optimize: `uv run python -m etfmomentum short-optimize --universe emerging`*
+*Short optimize: `uv run python -m etfmomentum short-optimize --universe <universe>`*
 *Available universes: `sp500`, `emerging`, `developed`, `commodity`, `multi_asset`, `factor`, `bond`*
 *Backtest: `uv run python -m etfmomentum backtest --universe <universe> --start-date 2016-01-01`*
 *Walk-forward: `uv run python -m etfmomentum walk-forward --universe <universe>`*
