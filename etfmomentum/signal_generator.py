@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 import logging
 
-from .rs_engine import generate_signals, get_qualifying_etfs, apply_correlation_filter, calculate_sector_breadth, get_short_candidates
+from .rs_engine import generate_signals, get_qualifying_etfs, apply_correlation_filter, calculate_sector_breadth
 
 logger = logging.getLogger(__name__)
 
@@ -467,34 +467,15 @@ def run_short_signals(universe: str) -> List[str]:
         roc_lookback=long_params['roc_lookback_days'],
     )
 
-    # Fetch full pool so correlation filter has room to fill from 4th/5th+ ranked candidates
-    pool = get_short_candidates(
+    candidates = get_short_candidates(
         signals,
         evaluation_date,
         short_params['top_n'],
         exclude_tickers=long_tickers,
         qualification=short_params['qualification'],
-        pool_size=len(etf_tickers),
     )
 
-    if pool.empty:
-        return []
-
-    # Directional gate: all candidates must be in absolute downtrend (price < SMA AND rs_roc < 0)
-    pool = pool[(pool['abs_filter'] == False) & (pool['rs_roc'] < 0)]  # noqa: E712
-
-    if pool.empty:
-        return []
-
-    # Correlation filter: greedy selection up to top_n, skipping highly-correlated candidates
-    if config.ENABLE_CORRELATION_FILTER:
-        pool = apply_correlation_filter(
-            pool, price_data, short_params['top_n'],
-            config.CORRELATION_LOOKBACK_DAYS,
-            config.CORRELATION_FILTER_THRESHOLD,
-        )
-
-    return list(pool['ticker']) if not pool.empty else []
+    return list(candidates['ticker']) if not candidates.empty else []
 
 
 def _run_short_signals_with_data(
@@ -545,32 +526,13 @@ def _run_short_signals_with_data(
         roc_lookback=long_params["roc_lookback_days"],
     )
 
-    # Fetch full pool so correlation filter has room to fill from 4th/5th+ ranked candidates
-    pool = get_short_candidates(
+    candidates = get_short_candidates(
         signals, date, n,
         exclude_tickers=long_tickers,
         qualification=short_params.get('qualification', 'both_filters'),
-        pool_size=len(etf_tickers),
     )
 
-    if pool.empty:
-        return []
-
-    # Directional gate: all candidates must be in absolute downtrend (price < SMA AND rs_roc < 0)
-    pool = pool[(pool['abs_filter'] == False) & (pool['rs_roc'] < 0)]  # noqa: E712
-
-    if pool.empty:
-        return []
-
-    # Correlation filter: greedy selection up to n, skipping highly-correlated candidates
-    if config.ENABLE_CORRELATION_FILTER:
-        pool = apply_correlation_filter(
-            pool, price_data_slice, n,
-            config.CORRELATION_LOOKBACK_DAYS,
-            config.CORRELATION_FILTER_THRESHOLD,
-        )
-
-    return list(pool['ticker']) if not pool.empty else []
+    return list(candidates['ticker']) if not candidates.empty else []
 
 
 def get_all_etf_current_status(

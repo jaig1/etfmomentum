@@ -182,7 +182,6 @@ def get_short_candidates(
     n: int = 2,
     exclude_tickers: Optional[List[str]] = None,
     qualification: str = 'both_filters',
-    pool_size: Optional[int] = None,
 ) -> pd.DataFrame:
     """
     Get bottom N ETFs ranked by momentum_quality ascending (worst trend first).
@@ -193,22 +192,17 @@ def get_short_candidates(
     Args:
         signals: Dictionary of signals DataFrames for each ETF
         date: Date to evaluate
-        n: Final number of short candidates intended (used as default pool_size)
+        n: Maximum number of short candidates to return
         exclude_tickers: Tickers already held long — skipped to avoid conflicts
         qualification: 'both_filters' — must fail both rs_filter and abs_filter;
                        'momentum_quality_only' — bottom N by score regardless of filters
-        pool_size: Number of candidates to return. Defaults to n. Pass a larger
-                   value (e.g. len(etf_tickers)) to give the caller room for
-                   correlation filtering and fill logic.
 
     Returns:
         DataFrame sorted by momentum_quality ascending (worst trend first),
-        up to pool_size rows. Empty DataFrame if no candidates qualify.
+        up to n rows. Empty DataFrame if no candidates qualify.
     """
     if exclude_tickers is None:
         exclude_tickers = []
-    if pool_size is None:
-        pool_size = n
 
     candidates = []
 
@@ -246,7 +240,7 @@ def get_short_candidates(
     # Ascending sort: most negative momentum quality = smoothest downtrend = best short
     df_candidates = df_candidates.sort_values('momentum_quality', ascending=True).reset_index(drop=True)
 
-    return df_candidates.head(pool_size)
+    return df_candidates.head(n)
 
 
 def calculate_sector_breadth(
