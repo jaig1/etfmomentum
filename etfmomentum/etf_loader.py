@@ -84,6 +84,7 @@ def get_available_universes(etflist_dir: Path) -> Dict[str, str]:
         'multi_asset': 'multi_asset_etfs.csv',
         'factor': 'factor_etfs.csv',
         'bond': 'bond_etfs.csv',
+        'top20': 'top20_stock.csv',
     }
 
     for universe_name, filename in universe_files.items():
@@ -117,6 +118,7 @@ def load_universe_by_name(universe_name: str, etflist_dir: Path) -> Dict[str, st
         'multi_asset': 'multi_asset_etfs.csv',
         'factor': 'factor_etfs.csv',
         'bond': 'bond_etfs.csv',
+        'top20': 'top20_stock.csv',
     }
 
     if universe_name not in universe_files:

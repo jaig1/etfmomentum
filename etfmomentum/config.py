@@ -77,6 +77,11 @@ UNIVERSE_PARAMS = {
         "roc_lookback_days": 63,    # 3 months  — walk-forward consensus (6/6 windows; extremely stable)
         "top_n": 10,                # walk-forward consensus (W4-W6); bonds benefit from diversification not concentration
     },
+    "top20": {
+        "sma_lookback_days": 126,   # 6 months  — walk-forward consensus (5/6 windows)
+        "roc_lookback_days": 126,   # 6 months  — walk-forward consensus (5/6 windows)
+        "top_n": 5,                 # walk-forward consensus (4/6 windows)
+    },
 }
 
 # Backtest Parameters

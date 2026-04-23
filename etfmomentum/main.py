@@ -58,7 +58,7 @@ def parse_arguments():
     # Backtest mode
     backtest_parser = subparsers.add_parser('backtest', help='Run historical backtest')
     backtest_parser.add_argument('--universe', type=str, default='emerging',
-                                 choices=['emerging', 'developed', 'sp500', 'commodity', 'multi_asset', 'factor', 'bond'],
+                                 choices=['emerging', 'developed', 'sp500', 'commodity', 'multi_asset', 'factor', 'bond', 'top20'],
                                  help='ETF universe to use (default: emerging)')
     backtest_parser.add_argument('--refresh', action='store_true', help='Force re-download data')
     backtest_parser.add_argument('--start-date', type=str, default=config.BACKTEST_START_DATE,
@@ -73,7 +73,7 @@ def parse_arguments():
     # Short-optimize mode
     so_parser = subparsers.add_parser('short-optimize', help='Grid search over short sleeve parameters')
     so_parser.add_argument('--universe', type=str, default='emerging',
-                           choices=['emerging', 'developed', 'sp500', 'commodity', 'multi_asset', 'factor', 'bond'],
+                           choices=['emerging', 'developed', 'sp500', 'commodity', 'multi_asset', 'factor', 'bond', 'top20'],
                            help='ETF universe to optimize against (default: emerging)')
     so_parser.add_argument('--start-date', type=str, default='2016-01-01',
                            help='Backtest start date (default: 2016-01-01)')
@@ -83,14 +83,14 @@ def parse_arguments():
     # Walk-forward mode
     wf_parser = subparsers.add_parser('walk-forward', help='Run walk-forward validation')
     wf_parser.add_argument('--universe', type=str, default='sp500',
-                           choices=['emerging', 'developed', 'sp500', 'commodity', 'multi_asset', 'factor', 'bond'],
+                           choices=['emerging', 'developed', 'sp500', 'commodity', 'multi_asset', 'factor', 'bond', 'top20'],
                            help='ETF universe to use (default: sp500)')
     wf_parser.add_argument('--refresh', action='store_true', help='Force re-download data')
 
     # Signal mode
     signal_parser = subparsers.add_parser('signal', help='Generate current month signals')
     signal_parser.add_argument('--universe', type=str, default='emerging',
-                               choices=['emerging', 'developed', 'sp500', 'commodity', 'multi_asset', 'factor', 'bond'],
+                               choices=['emerging', 'developed', 'sp500', 'commodity', 'multi_asset', 'factor', 'bond', 'top20'],
                                help='ETF universe to use (default: emerging)')
     signal_parser.add_argument('--refresh', action='store_true', help='Force re-download data')
     signal_parser.add_argument('--detailed', action='store_true', help='Show detailed status for all ETFs')

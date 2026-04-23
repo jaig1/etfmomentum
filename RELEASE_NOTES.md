@@ -2,6 +2,102 @@
 
 ---
 
+## v0.14.0 — Top 20 Stock Universe (April 23, 2026)
+
+### Overview
+
+v0.14.0 adds a new **Top 20 mega-cap stock universe** — the first individual-stock universe in the framework. All existing ETF universes and short sleeves are unchanged.
+
+### New Universe: `top20`
+
+20 of the largest US stocks by market cap, covering technology, consumer, financials, healthcare, and energy:
+
+```
+NVDA, AAPL, GOOGL, MSFT, AMZN, BRK-B, TSLA, AVGO, META,
+JPM, LLY, XOM, JNJ, WMT, V, COST, MA, NFLX, ABBV, MU
+```
+
+> **Note:** `BRK-B` uses hyphen format (not `BRK.B`) — required by the FMP API.
+
+### Optimized Parameters
+
+Parameters determined via 48-combination grid search, validated with 6-window walk-forward (decay ratio 0.99):
+
+| Parameter | Value | Source |
+|---|---|---|
+| `sma_lookback_days` | 126 (6 months) | Walk-forward consensus (5/6 windows) |
+| `roc_lookback_days` | 126 (6 months) | Walk-forward consensus (5/6 windows) |
+| `top_n` | 5 | Walk-forward consensus (4/6 windows) |
+
+### Validated Performance
+
+**10-Year Backtest (2016–2026, WF consensus params):**
+
+| Metric | Strategy | SPY |
+|---|---|---|
+| Total Return | 93,412% | 241% |
+| Annualized Return | 96.45% | 12.88% |
+| Sharpe Ratio | 2.849 | 0.514 |
+| Max Drawdown | -16.10% | -34.10% |
+| Win Rate (years) | 10/10 | — |
+
+**Walk-Forward OOS (6 windows):**
+
+| Metric | Value |
+|---|---|
+| Combined OOS Return | 24,470% |
+| Avg OOS Sharpe | 2.320 |
+| OOS/IS Decay Ratio | **0.99** (near-zero degradation) |
+| Windows beating SPY | 6/6 |
+
+**Year-wise Max Drawdown — Strategy consistently protects capital:**
+
+| Year | Strategy | SPY |
+|---|---|---|
+| 2018 | -2.0% | -14.0% |
+| 2020 | -3.9% | -19.9% |
+| 2022 | -3.7% | -20.9% |
+
+### Turnover Characteristics
+
+- **Rebalance frequency:** Weekly
+- **Average holding period:** ~5 weeks per position
+- **Annual turnover:** ~1,000% (approx. 0.5 positions rotated per week)
+- **Tax note:** Almost all gains are short-term. Best suited for tax-advantaged accounts (IRA/401k).
+
+### How to Use
+
+```bash
+# Run current signals
+uv run python -m etfmomentum signal --universe top20 --detailed
+
+# Run 10-year backtest
+uv run python -m etfmomentum backtest --universe top20 --start-date 2016-01-01
+
+# Run walk-forward validation
+uv run python -m etfmomentum walk-forward --universe top20
+
+# Re-run grid search optimization
+uv run python -c "from etfmomentum.optimizer import optimize_parameters; optimize_parameters(universe='top20', output_subdir='top20')"
+```
+
+### Installation
+
+```bash
+pip install git+https://github.com/jaig1/etfmomentum.git@v0.14.0
+```
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `etfmomentum/etflist/top20_stock.csv` | New — 20 mega-cap stock universe |
+| `etfmomentum/etf_loader.py` | Registered `top20` in universe map |
+| `etfmomentum/config.py` | Added `top20` to `UNIVERSE_PARAMS` |
+| `etfmomentum/main.py` | Added `top20` to CLI universe choices |
+
+---
+
 ## v0.13.0 — Short Hedge Sleeve: SP500 Universe + Short Pipeline Hardening (April 17, 2026)
 
 ### Overview
