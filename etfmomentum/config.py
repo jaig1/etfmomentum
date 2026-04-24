@@ -133,7 +133,7 @@ EXTREME_VOL_THRESHOLD = 0.35  # 35% annualized volatility for extreme regime
 # Adds 25% gross short on top of 100% long (125% gross total).
 # Closes automatically when the breadth filter triggers.
 ENABLE_SHORT_SELLING = True           # Master kill switch for short selling across all universes
-SHORT_ENABLED_UNIVERSES = ['emerging', 'commodity', 'sp500']  # Universes with short selling active; add more as validated
+SHORT_ENABLED_UNIVERSES = ['emerging', 'commodity', 'sp500', 'developed']  # Universes with short selling active; add more as validated
 
 # Per-universe short parameters — optimized independently per universe via short_optimizer.py.
 # Only universes listed in SHORT_ENABLED_UNIVERSES are active; entries here are ignored otherwise.
@@ -155,6 +155,12 @@ SHORT_UNIVERSE_PARAMS = {
         'top_n':         1,                       # Single worst sector (cleaner signal in 12-ETF universe)
         'allocation':    0.33,                    # 33% gross short notional on top of 100% long (133% gross)
         'stop_loss':     1.03,                    # Cover if price rises 3% above entry
+        'qualification': 'both_filters',          # both_filters == momentum_quality_only (tied); stricter gate chosen
+    },
+    'developed': {
+        'top_n':         1,                       # Single worst ETF (same pattern as SP500; top_n=1 cleaner in large universe)
+        'allocation':    0.33,                    # 33% gross short notional on top of 100% long (133% gross)
+        'stop_loss':     1.03,                    # Cover if price rises 3% above entry; 3% stop decisive (avg Sharpe 1.296 vs 1.153 at 5%)
         'qualification': 'both_filters',          # both_filters == momentum_quality_only (tied); stricter gate chosen
     },
 }
