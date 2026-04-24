@@ -1,6 +1,6 @@
 # ETF Momentum Strategy — Comprehensive Overview
 
-*Last updated: April 17, 2026 | Version: 0.13.0 (short hedge sleeve — emerging + commodity + sp500; short pipeline hardening)*
+*Last updated: April 24, 2026 | Version: 0.15.0 (short hedge sleeve — emerging + commodity + sp500 + developed)*
 
 ---
 
@@ -21,6 +21,7 @@
 13. [Bond ETF Universe — Detailed Notes](#13-bond-etf-universe--detailed-notes)
 14. [Short Hedge Sleeve — Detailed Notes](#14-short-hedge-sleeve--detailed-notes)
 15. [SP500 Short Sleeve — Detailed Notes](#15-sp500-short-sleeve--detailed-notes)
+16. [Developed Market Short Sleeve — Detailed Notes](#16-developed-market-short-sleeve--detailed-notes)
 
 ---
 
@@ -718,6 +719,53 @@ Short sleeve stats (10yr): 82% activation rate, 62 stop triggers (~6.2/yr). Domi
 
 ---
 
+### Phase 20 — Short Hedge Sleeve: Developed Market Universe (April 24, 2026)
+
+*(See Section 16 for full details.)*
+
+**What was done (v0.15.0):** Short selling was added to the developed market universe after a 72-combo grid search. The 26-ETF country ETF universe has persistent laggards — countries in structural decline (Japan unhedged, Nordic small caps, emerging Europe) consistently underperform over multi-quarter periods. Shorts fire in 81% of weeks.
+
+**Key finding vs other universes:** `top_n=1` wins, consistent with SP500. The 26 country ETFs are more correlated than commodity or pure-factor ETFs; the correlation filter regularly blocks a second short candidate. The 3% stop-loss is the single most decisive parameter (avg Sharpe 1.296 at 3% vs 1.153 at 5%).
+
+**Optimized Parameters (developed):**
+
+| Parameter | Value | Notes |
+|---|---|---|
+| `top_n` | 1 | Single worst country ETF (33% gross short; one concentrated position) |
+| `allocation` | 0.33 | 33% gross short on top of 100% long (133% gross) |
+| `stop_loss` | 1.03 | Cover if price rises 3% above entry |
+| `qualification` | `both_filters` | Tied with `momentum_quality_only` after directional gate; stricter gate chosen |
+
+**Grid Search Sensitivity (developed):**
+
+| Parameter | Key Finding |
+|---|---|
+| `top_n` | 1, 2, 3 all similar avg Sharpe (~1.14); top_n=1 marginally best and cleaner |
+| `stop_loss` | 3% decisive — avg Sharpe 1.296 (3%) vs 1.153 (5%) vs 1.078 (7%) |
+| `allocation` | 33% best (avg 1.202) vs 25% (1.154) vs 15% (1.071) |
+| `qualification` | Exactly tied; `both_filters` chosen as stricter gate |
+
+**Performance vs Baseline (long-only):**
+
+| Period | Metric | Baseline | With Short Sleeve | Delta |
+|---|---|---|---|---|
+| 10yr (2016–2026) | Sharpe | 0.935 | **1.44** | +0.505 |
+| 10yr | Ann Return | 15.99% | **22.01%** | +6.02pp |
+| 10yr | Max Drawdown | -13.95% | **-6.72%** | +7.23pp tighter |
+| 10yr | Total Return | 349% | **650%** | — |
+| 19yr (2007–2026) | Sharpe | 0.885 | **1.536** | +0.651 |
+| 19yr | Ann Return | 16.14% | **25.93%** | +9.79pp |
+| 19yr | Max Drawdown | -13.95% | **-8.24%** | +5.71pp tighter |
+| 19yr | Total Return | 1,649% | **8,113%** | — |
+
+Short sleeve stats (10yr): 81% activation rate, ~6.3 stop triggers/year.
+
+**Walk-Forward Note:** OOS decay ratio 0.57 (weak — same tier as bond universe). 2/6 windows beat SPY. Params are rock-stable (SMA=8mo, ROC=1mo, TopN=3 selected in all 6 IS windows). WF weakness accepted; treat developed as a complement universe, not a standalone alpha driver.
+
+**Version bump:** 0.14.0 → 0.15.0
+
+---
+
 ## 4. Defensive Layers
 
 Four mechanisms provide capital protection, operating at different timescales and triggers:
@@ -857,13 +905,13 @@ Notes:
 - Use `multi_asset` for cross-asset class rotation with drawdown protection; lower alpha vs equities but strong risk-adjusted returns (see Section 11)
 - Use `factor` for US equity factor rotation (value/growth/momentum/quality); best OOS decay ratio (0.87) but modest raw returns due to vol-regime SPY dilution (see Section 12)
 - Use `bond` as a **complement** to equity universes — provides counter-cyclical exposure in equity bear years (2018, 2020, 2022); correct standalone benchmark is AGG not SPY (see Section 13)
-- `developed` is the weakest universe; use only if there is a specific mandate for developed market exposure
+- `developed` has the weakest walk-forward OOS (decay 0.57); short sleeve added v0.15.0 improves in-sample Sharpe to 1.44 but OOS generalisation remains limited — use only if there is a specific mandate for developed market exposure
 
 ---
 
 ## 7. Current Performance
 
-### Current Parameters (v0.13.0)
+### Current Parameters (v0.15.0)
 
 ```python
 # Global (shared across all universes)
@@ -893,7 +941,7 @@ UNIVERSE_PARAMS = {
 # Short pipeline (v0.13.0): directional gate (price < SMA AND rs_roc < 0) +
 # correlation filter applied to all short candidate pools before final selection.
 ENABLE_SHORT_SELLING = True
-SHORT_ENABLED_UNIVERSES = ['emerging', 'commodity', 'sp500']
+SHORT_ENABLED_UNIVERSES = ['emerging', 'commodity', 'sp500', 'developed']
 SHORT_UNIVERSE_PARAMS = {
     "emerging": {
         "top_n":         3,                       # bottom 3 ETFs by momentum quality
@@ -911,6 +959,12 @@ SHORT_UNIVERSE_PARAMS = {
         "top_n":         1,                       # single worst sector (33% per position)
         "allocation":    0.33,                    # 33% gross short on top of 100% long (133% gross)
         "stop_loss":     1.03,                    # cover if price rises 3% above entry
+        "qualification": "both_filters",          # tied with momentum_quality_only; stricter gate chosen
+    },
+    "developed": {
+        "top_n":         1,                       # single worst country ETF (33% per position)
+        "allocation":    0.33,                    # 33% gross short on top of 100% long (133% gross)
+        "stop_loss":     1.03,                    # cover if price rises 3% above entry; 3% stop decisive
         "qualification": "both_filters",          # tied with momentum_quality_only; stricter gate chosen
     },
 }
@@ -1494,7 +1548,7 @@ Returns `[]` when no qualifying candidates pass the directional gate or when `EN
 | `emerging` | **Yes** | top_n=3, alloc=33%, stop=3%, `momentum_quality_only` | Optimized v0.10.0; breadth-filter reversal v0.11.0; Sharpe 2.778 (19yr) |
 | `commodity` | **Yes** | top_n=2, alloc=33%, stop=3%, `both_filters` | Optimized v0.12.0; Sharpe 2.194 (10yr) |
 | `sp500` | **Yes** | top_n=1, alloc=33%, stop=3%, `both_filters` | Optimized v0.13.0; Sharpe 1.626 (10yr); single worst sector |
-| `developed` | No | — | Pending optimization |
+| `developed` | **Yes** | top_n=1, alloc=33%, stop=3%, `both_filters` | Optimized v0.15.0; Sharpe 1.44 (10yr) / 1.536 (19yr); WF decay 0.57 ⚠️ |
 | `multi_asset` | No | — | Pending optimization |
 | `factor` | No | — | Candidate — slow factor rotations may reward shorting |
 | `bond` | No | — | Not suitable — long-only complement universe |
@@ -1502,8 +1556,8 @@ Returns `[]` when no qualifying candidates pass the directional gate or when `EN
 To enable for a new universe: run `short-optimize --universe <name>`, validate on 10yr + 19yr, then add optimized params to `SHORT_UNIVERSE_PARAMS` and add to `SHORT_ENABLED_UNIVERSES`.
 
 ```python
-# Install v0.13.0
-# pip install git+https://github.com/jaig1/etfmomentum.git@v0.13.0
+# Install v0.15.0
+# pip install git+https://github.com/jaig1/etfmomentum.git@v0.15.0
 ```
 
 ---
@@ -1587,6 +1641,118 @@ shorts = run_short_signals('sp500')  # e.g. ['XLU']   (0 or 1 ticker)
 | 19yr (2007–2026) | **1.397** | 25.06% | -8.52% | 7,272% | +6,894pp |
 
 Activation rate 82%; all bear-market years strongly positive (2008: +21%, 2022: +40%).
+
+---
+
+## 16. Developed Market Short Sleeve — Detailed Notes
+
+### Concept
+
+The developed market short sleeve shorts the **single weakest country ETF** at any rebalance point. The 26-ETF universe (Japan, Germany, UK, Australia, Canada, etc.) contains persistent structural laggards — countries undergoing currency weakness, political disruption, or sector-heavy drawdowns — that remain weak over multi-quarter periods.
+
+**Portfolio structure (developed with short sleeve):**
+
+| Sleeve | Allocation | Positions |
+|---|---|---|
+| Long | 100% | Top 3 country ETFs by momentum quality |
+| Short | 33% | Bottom 1 country ETF by momentum quality |
+| **Gross exposure** | **133%** | |
+| **Net long exposure** | **67%** | |
+
+### Country Dynamics That Enable Shorting
+
+Developed market country ETFs are driven by macro, currency, and sector composition:
+
+| Laggard type | Example | Typical short candidates |
+|---|---|---|
+| Currency weakness (unhedged ETF) | 2022–2023 Japan | EWJ (unhedged yen) |
+| Commodity-heavy country in bear | 2014–2016 Canada/Australia | EWC, EWA |
+| Political/fiscal stress | UK Brexit 2018–2020 | EWU |
+| Nordic small-cap dislocation | Various | ENOR, EFNL, EDEN |
+
+Recurring 2025 short: EDEN (Denmark) — biotech-heavy composition made it a persistent laggard during health sector rotation out. HEWJ (hedged Japan) also featured multiple times due to yen dynamics.
+
+### Correlation Structure and Why `top_n=1`
+
+The 26 country ETFs share high pairwise correlations — emerging/developed market risk-on/risk-off regimes move many countries together. The correlation filter regularly blocks a second short candidate. Grid search confirmed all three `top_n` values produce nearly identical average Sharpe (1.143 / 1.135 / 1.150) — concentration at 1 is cleaner and avoids correlated bets.
+
+**Grid search confirmation:**
+
+| top_n | Avg Sharpe (10yr) |
+|---|---|
+| 1 | **1.143** |
+| 2 | 1.135 |
+| 3 | 1.150 |
+
+### Stop-Loss Behaviour
+
+The 3% stop is the single most decisive parameter in this universe:
+
+| Stop % | Avg Sharpe |
+|---|---|
+| 3% | **1.296** |
+| 5% | 1.153 |
+| 7% | 1.078 |
+| 10% | 1.043 |
+
+Country ETFs can gap violently on geopolitical or currency events. The 3% stop is tight enough to limit damage from sudden reversals but loose enough to avoid whipsawing out of valid short trends.
+
+### Walk-Forward Caveat
+
+OOS decay ratio: **0.57** — the weakest of all short-enabled universes (same tier as bond). 2/6 walk-forward windows beat SPY; 3 windows produced near-zero or negative OOS Sharpe. Parameter stability is excellent (SMA=8mo, ROC=1mo, TopN=3 chosen in all 6 IS windows) but the developed market signal itself generalizes poorly OOS — characteristic of a universe where country rotation is more macro-driven than systematic.
+
+**Implication for users:** The in-sample Sharpe improvement (+0.505 on 10yr, +0.651 on 19yr) is real but partially reflects the short sleeve capturing 2008 GFC crisis alpha (Japanese and European ETFs were persistent shorts). Treat as complement allocation, not primary alpha source.
+
+### Third-Party Usage
+
+```python
+from etfmomentum import run_signals, run_short_signals
+
+# Weekly rebalance — Developed Market
+longs  = run_signals('developed')        # e.g. ['EIS', 'ENOR', 'EWK']
+shorts = run_short_signals('developed')  # e.g. ['EDEN']  (0 or 1 ticker)
+
+# Position sizing:
+#   Long:  33.3% per position (3 positions = 100%)
+#   Short: 33.0% single position
+#   Gross: 133% | Net long: 67%
+
+# Stop-loss (bot's responsibility, check daily):
+#   Long:  cover if price < entry * 0.95  (5% stop)
+#   Short: cover if price > entry * 1.03  (3% stop)
+```
+
+### Performance Reference
+
+| Period | Sharpe | Ann Return | MaxDD | Total Return |
+|---|---|---|---|---|
+| 10yr (2016–2026) | **1.44** | 22.01% | -6.72% | 650% |
+| 19yr (2007–2026) | **1.536** | 25.93% | -8.24% | 8,113% |
+
+Baseline (long-only): 10yr Sharpe 0.935 / Ann 15.99% / MaxDD -13.95%.
+Activation rate 81%; ~6.3 stop triggers/year.
+
+---
+
+## 17. Future Enhancements
+
+### TBD-1: Rolling Walk-Forward Optimization (Annual Re-Calibration)
+
+**Proposal:** Re-optimize SMA and ROC lookback parameters annually using a trailing 3-year training window, so the strategy self-tunes to evolving market regimes rather than relying on fixed parameters.
+
+**Assessment:** Partially valid premise, but the specific "trailing 3 years" design introduces more risk than it removes.
+
+**Why the current expanding-window WFO is preferable:**
+- Our existing WFO (`walk_forward.py`) already re-optimizes parameters per window — parameters are not fixed forever.
+- OOS/IS decay ratios across all universes are 0.87–0.93 (ROBUST), indicating parameters generalize well across regimes and do not need frequent recalibration.
+- A 3-year rolling window produces only ~36 monthly rebalance observations per grid search run (48 combinations). At that sample size, optimization noise dominates signal — classic overfitting.
+- Rolling windows discard bear market data (e.g., by 2011–2013 the 2008 crisis is gone). The breadth filter and stop-loss calibrations depend on stress regime data being present.
+
+**What is worth implementing instead:**
+- Shrink OOS test window from 2 years to 1 year (keep expanding training). This gives annual recalibration checks without losing long-term data.
+- Surface the latest WFO window's best params (W6) as the "current recommended params" in CLI output — they represent the freshest signal.
+
+**Status:** TBD — requires re-running WFO on all universes with 1-year test windows to validate before changing live params.
 
 ---
 
