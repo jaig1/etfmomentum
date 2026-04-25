@@ -187,9 +187,12 @@ def _compute_tickers(
     params = config.UNIVERSE_PARAMS.get(universe, config.UNIVERSE_PARAMS["sp500"])
 
     # Breadth filter — check before running signals; same logic for live and backtest
+    # Per-universe override: if 'enable_breadth_filter' is explicitly set to False in
+    # UNIVERSE_PARAMS, skip the breadth filter for that universe regardless of the global flag.
     effective_top_n = top_n
     cash_prefix: List[str] = []
-    if config.ENABLE_BREADTH_FILTER:
+    breadth_filter_active = config.ENABLE_BREADTH_FILTER and params.get("enable_breadth_filter", True)
+    if breadth_filter_active:
         breadth = calculate_sector_breadth(price_data, etf_tickers, params["sma_lookback_days"])
         if breadth < config.BREADTH_FILTER_THRESHOLD:
             logger.info(f"Breadth filter triggered on {evaluation_date.date()}: {breadth:.1%} of sectors above SMA (cash={config.BREADTH_CASH_ALLOCATION:.0%})")
