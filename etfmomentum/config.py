@@ -56,6 +56,7 @@ UNIVERSE_PARAMS = {
         "sma_lookback_days": 168,   # 8 months  — walk-forward consensus (6/6 windows)
         "roc_lookback_days": 21,    # 1 month   — walk-forward consensus
         "top_n": 3,
+        "enable_breadth_filter": False,  # breadth filter disabled: higher returns with near-identical Sharpe (10yr 1.439 vs 1.440); MaxDD accepted (-8.47% vs -6.72%)
     },
     "commodity": {
         "sma_lookback_days": 126,   # 6 months  — walk-forward consensus (6/6 windows)
