@@ -62,6 +62,7 @@ UNIVERSE_PARAMS = {
         "sma_lookback_days": 126,   # 6 months  — walk-forward consensus (6/6 windows)
         "roc_lookback_days": 126,   # 6 months  — walk-forward consensus (6/6 windows); ROC=1mo overfits in-sample
         "top_n": 3,                 # in-sample optimal; correlation filter makes TopN>3 redundant in this universe
+        "enable_breadth_filter": False,  # breadth filter disabled: higher Sharpe (2.252 vs 2.194 10yr) with identical MaxDD -10.56%; 95% short activation makes filter redundant
     },
     "multi_asset": {
         "sma_lookback_days": 126,   # 6 months  — walk-forward consensus (6/6 windows)
