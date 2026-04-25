@@ -51,6 +51,7 @@ UNIVERSE_PARAMS = {
         "sma_lookback_days": 252,   # 12 months — walk-forward consensus (5/6 windows)
         "roc_lookback_days": 21,    # 1 month   — walk-forward consensus
         "top_n": 3,
+        "enable_breadth_filter": False,  # breadth filter disabled: 10yr Sharpe 2.765 vs 2.514; 19yr Sharpe 2.555 vs 2.778 (trade-off accepted)
     },
     "developed": {
         "sma_lookback_days": 168,   # 8 months  — walk-forward consensus (6/6 windows)
