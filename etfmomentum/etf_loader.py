@@ -1,11 +1,83 @@
 """ETF universe loader - reads ETF lists from external CSV files."""
 
 import csv
+import requests
 from pathlib import Path
 from typing import Dict
 import logging
 
 logger = logging.getLogger(__name__)
+
+TOPT_HOLDER_ENDPOINT = "https://financialmodelingprep.com/api/v3/etf-holder/TOPT"
+TOPT_INCEPTION_DATE = "2024-10-24"  # Earliest available TOPT price data
+
+
+def fetch_topt_holdings(api_key: str, top_n: int = 20) -> Dict[str, str]:
+    """
+    Fetch live top-N stock holdings from the TOPT ETF via FMP API.
+
+    Deduplicates share-class variants (e.g. GOOGL / GOOG) by CUSIP issuer
+    prefix (first 6 chars), keeping the higher-weight class.
+
+    Args:
+        api_key: FMP API key
+        top_n:   Maximum number of stocks to return (default 20)
+
+    Returns:
+        Dict mapping ticker → company name, ordered by weight descending
+
+    Raises:
+        RuntimeError: On any API or data error — no fallback
+    """
+    try:
+        response = requests.get(
+            TOPT_HOLDER_ENDPOINT,
+            params={"apikey": api_key},
+            timeout=30,
+        )
+        response.raise_for_status()
+        data = response.json()
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"Failed to fetch TOPT holdings from FMP API: {e}")
+
+    if not isinstance(data, list) or len(data) == 0:
+        raise RuntimeError(
+            "TOPT holdings API returned empty or unexpected response — cannot proceed"
+        )
+
+    # Filter out cash/collateral rows (asset field is empty)
+    stocks = [row for row in data if row.get("asset", "").strip()]
+
+    if not stocks:
+        raise RuntimeError("TOPT holdings API returned no stock entries after filtering cash rows")
+
+    # Sort by weight descending (API usually returns sorted, but enforce it)
+    stocks.sort(key=lambda r: r.get("weightPercentage", 0), reverse=True)
+
+    # Deduplicate by CUSIP issuer prefix (first 6 chars) — keeps highest-weight share class
+    seen_cusip_prefixes: set = set()
+    deduplicated = []
+    for row in stocks:
+        cusip = row.get("cusip", "").strip()
+        prefix = cusip[:6] if len(cusip) >= 6 else None
+
+        if prefix and prefix in seen_cusip_prefixes:
+            logger.info(
+                f"Skipping {row['asset']} (CUSIP prefix {prefix} already seen — "
+                f"share-class duplicate of a higher-weight holding)"
+            )
+            continue
+
+        if prefix:
+            seen_cusip_prefixes.add(prefix)
+
+        deduplicated.append(row)
+
+    top_holdings = deduplicated[:top_n]
+
+    result = {row["asset"]: row["name"].title() for row in top_holdings}
+    logger.info(f"Fetched {len(result)} live holdings from TOPT ETF (top_n={top_n})")
+    return result
 
 
 def load_etf_universe(csv_file_path: Path) -> Dict[str, str]:
@@ -95,21 +167,27 @@ def get_available_universes(etflist_dir: Path) -> Dict[str, str]:
     return universes
 
 
-def load_universe_by_name(universe_name: str, etflist_dir: Path) -> Dict[str, str]:
+def load_universe_by_name(universe_name: str, etflist_dir: Path, api_key: str = None) -> Dict[str, str]:
     """
     Load ETF universe by name.
 
+    For the 'top20' universe, holdings are fetched live from the TOPT ETF via
+    FMP API on every call (always current; raises RuntimeError on failure).
+    All other universes are loaded from their static CSV files (backtest-safe).
+
     Args:
-        universe_name: Name of universe (emerging, developed, sp500, commodity, multi_asset)
-        etflist_dir: Directory containing ETF list CSV files
+        universe_name: Name of universe (sp500, emerging, developed, commodity,
+                       multi_asset, factor, bond, top20)
+        etflist_dir:   Directory containing ETF list CSV files
+        api_key:       FMP API key — required for top20, ignored for all others
 
     Returns:
         Dictionary mapping ticker to ETF name
 
     Raises:
-        ValueError: If universe name is invalid or file not found
+        ValueError:   If universe name is invalid or CSV file not found
+        RuntimeError: If top20 live API fetch fails
     """
-    # Map universe names to filenames
     universe_files = {
         'emerging': 'emerging_market_etfs.csv',
         'developed': 'developed_market_etfs.csv',
@@ -127,6 +205,13 @@ def load_universe_by_name(universe_name: str, etflist_dir: Path) -> Dict[str, st
             f"Invalid universe '{universe_name}'. "
             f"Available universes: {available}"
         )
+
+    # top20 always uses live TOPT holdings — no CSV fallback
+    if universe_name == 'top20':
+        if not api_key:
+            from . import config
+            api_key = config.FMP_API_KEY
+        return fetch_topt_holdings(api_key)
 
     filename = universe_files[universe_name]
     file_path = etflist_dir / filename
