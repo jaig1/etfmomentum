@@ -237,8 +237,16 @@ def run_backtest(
         - short_stats: Dict with short sleeve summary metrics
     """
     from . import config
-    from .etf_loader import load_universe_by_name
+    from .etf_loader import load_universe_by_name, TOPT_INCEPTION_DATE
     from .data_fetcher import fetch_all_data
+
+    # top20 universe is only valid from TOPT ETF inception date onward
+    if universe == "top20" and start_date < TOPT_INCEPTION_DATE:
+        logger.warning(
+            f"top20 backtest start_date {start_date} is before TOPT inception "
+            f"({TOPT_INCEPTION_DATE}). Clamping to {TOPT_INCEPTION_DATE}."
+        )
+        start_date = TOPT_INCEPTION_DATE
 
     # Load universe to know which tickers to fetch for portfolio valuation
     etf_universe = load_universe_by_name(universe, config.ETFLIST_DIR)

@@ -9,6 +9,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 TOPT_HOLDER_ENDPOINT = "https://financialmodelingprep.com/api/v3/etf-holder/TOPT"
+TOPT_INCEPTION_DATE = "2024-10-24"  # Earliest available TOPT price data
 
 
 def fetch_topt_holdings(api_key: str, top_n: int = 20) -> Dict[str, str]:
