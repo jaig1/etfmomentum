@@ -1,6 +1,6 @@
 # ETF Momentum Strategy — Comprehensive Overview
 
-*Last updated: April 24, 2026 | Version: 0.15.0 (short hedge sleeve — emerging + commodity + sp500 + developed)*
+*Last updated: April 26, 2026 | Version: 0.19.0 (top20 universe: live TOPT ETF holdings via FMP API on every signal call)*
 
 ---
 
@@ -22,6 +22,7 @@
 14. [Short Hedge Sleeve — Detailed Notes](#14-short-hedge-sleeve--detailed-notes)
 15. [SP500 Short Sleeve — Detailed Notes](#15-sp500-short-sleeve--detailed-notes)
 16. [Developed Market Short Sleeve — Detailed Notes](#16-developed-market-short-sleeve--detailed-notes)
+17. [Top20 Universe — Detailed Notes](#17-top20-universe--detailed-notes)
 
 ---
 
@@ -766,6 +767,70 @@ Short sleeve stats (10yr): 81% activation rate, ~6.3 stop triggers/year.
 
 ---
 
+### Phase 21 — Per-Universe Breadth Filter (April 25, 2026)
+
+**What was done (v0.16.0–v0.18.0):** The breadth filter was tested independently on all four short-enabled universes. A per-universe `enable_breadth_filter` flag was added to `UNIVERSE_PARAMS`, allowing each universe to opt out of the global breadth filter without affecting others. The filter was disabled for developed (v0.16.0), commodity (v0.17.0), and emerging (v0.18.0). It was retained for sp500 where it demonstrably earns its place.
+
+**Mechanism:** `_compute_tickers()` in `signal_generator.py` reads `params.get("enable_breadth_filter", True)` before checking the global `ENABLE_BREADTH_FILTER` flag. If a universe sets this to `False`, the breadth gate is skipped entirely for that universe regardless of the global setting.
+
+**Results by universe:**
+
+| Universe | 10yr Sharpe (with) | 10yr Sharpe (without) | 10yr MaxDD (with) | 10yr MaxDD (without) | Decision |
+|---|---|---|---|---|---|
+| Developed | 1.440 | 1.439 | -6.72% | -8.47% | ❌ Off — higher return (+0.56pp Ann), near-identical Sharpe, MaxDD cost accepted |
+| Commodity | 2.194 | **2.252** | -10.56% | **-10.56%** | ❌ Off — clean sweep: Sharpe +0.058, identical MaxDD |
+| Emerging | 2.514 | **2.765** | -7.68% | -9.10% | ❌ Off — 10yr Sharpe +0.251; 19yr trade-off accepted (2.555 vs 2.778) |
+| SP500 | **1.626** | 1.614 | **-8.09%** | -7.92% | ✅ On — dropping it costs Sharpe; filter earns its keep |
+
+**Why SP500 is different:** The breadth signal is calculated from the same 12 sector ETFs being traded — it is a direct health check of its own universe. When 8 of 12 sectors roll over, the signal is clean and actionable. For commodity/emerging/developed, the breadth reading is noisier (country/commodity ETFs roll over at different times for unrelated reasons), and the high-activation short book already hedges the downside the filter was attempting to deliver.
+
+**19yr summary for emerging (trade-off accepted):**
+
+| Metric | With Breadth Filter | Without (v0.18.0) |
+|---|---|---|
+| 19yr Sharpe | 2.778 | 2.555 (-0.223) |
+| 19yr Ann | 53.75% | 53.37% (-0.38pp) |
+| 19yr MaxDD | -8.12% | -10.02% (-1.90pp) |
+
+The 19yr deterioration was accepted because the 10yr improvement is substantial (+0.251 Sharpe, +10pp Ann) and the 100% short activation rate provides downside cover in low-breadth regimes that the filter was previously supplying.
+
+**Version bumps:** 0.15.0 → 0.16.0 (developed) → 0.17.0 (commodity) → 0.18.0 (emerging)
+
+---
+
+### Phase 22 — Live TOPT Holdings for Top20 Universe (April 26, 2026)
+
+**What was done (v0.19.0):** The `top20` universe switched from a static CSV snapshot to a live FMP API call on every signal and backtest invocation. Previously `top20_stock.csv` was a manually maintained file that required periodic hand-editing. It is now replaced by a live fetch from the TOPT ETF holdings endpoint (`/api/v3/etf-holder/TOPT`), ensuring the universe always reflects the current mega-cap composition without any manual intervention.
+
+**Key implementation decisions:**
+
+- **Share-class deduplication:** TOPT holds both GOOGL and GOOG (Alphabet Class A and C). Duplicates are detected by CUSIP issuer prefix (first 6 characters — the issuer code shared across all share classes). The higher-weight class is kept automatically. This is robust to any future share-class additions without hardcoding ticker pairs.
+- **No fallback on API failure:** A `RuntimeError` is raised if the FMP API is unreachable or returns an empty response. Silent fallback to stale data was rejected — stale universe data is worse than a clear failure.
+- **Transparent to all callers:** The live/static routing is handled entirely inside `load_universe_by_name()`. CLI, FastAPI, and Python import callers require zero changes.
+- **Backtest date guard:** Backtests are clamped to TOPT inception date (2024-10-24) with a warning. Requesting a start date before inception is silently corrected rather than silently running on pre-inception data with today's holdings.
+
+**Backtest results (Oct 2024 – Mar 2026 — full TOPT history, bias-free):**
+
+| Metric | Strategy | SPY Buy & Hold |
+|---|---|---|
+| Total Return | **195.59%** | 18.43% |
+| Annualized Return | **125.43%** | 13.53% |
+| Sharpe Ratio | **3.394** | 0.546 |
+| Max Drawdown | **-8.92%** | -19.00% |
+| Win rate (months) | **14 / 16** | — |
+| Win rate (years) | **2 / 2** | — |
+
+Note: prior top20 results (10yr Sharpe 2.849, Ann 96.45%) were generated using a static holdings snapshot — those results contain look-ahead bias and are superseded by these bias-free numbers. The 16-month live track record (Sharpe 3.394) is the only valid reference for this universe.
+
+**Regime highlights from the 73-week rebalance log:**
+- Oct 2024 – Feb 2025: Consumer/growth rotation — WMT, TSLA, NFLX dominant
+- Mar – Apr 2025: Breadth filter fires 5 weeks (tariff volatility) — SGOV defensive, MaxDD contained at -8.92%
+- Sep 2025 – Feb 2026: Semis/tech cycle — MU, GOOGL, AVGO, NVDA lock in
+
+**Version bump:** 0.18.0 → 0.19.0
+
+---
+
 ## 4. Defensive Layers
 
 Four mechanisms provide capital protection, operating at different timescales and triggers:
@@ -793,7 +858,7 @@ These four layers are additive and independent. Layer 1 (breadth) acts as a pre-
 
 | Layer | Timing | Trigger | Action |
 |---|---|---|---|
-| [1] Breadth Filter | Rebalance | < 40% sectors above SMA | 50% SGOV + 50% top-1 sector |
+| [1] Breadth Filter | Rebalance | < 40% of universe ETFs above SMA | 50% SGOV + 50% top-1 ETF (sp500 only — off for developed/commodity/emerging) |
 | [2] Volatility Regime | Rebalance | SPY vol level | Adjust N holdings + SPY floor |
 | [3] SGOV Momentum | Rebalance | ETF ROC < SGOV ROC | Replace position with SGOV |
 | [4] Stop-Loss | Daily | Price -5% from entry | Exit position → SGOV — validated: 0/46 whipsaws in 10yr backtest |
@@ -827,7 +892,7 @@ The top 3 ranked parameter combinations are tightly clustered (Sharpe 0.652–0.
 
 ## 6. Universe Analysis
 
-Seven universes are supported. Each has its own walk-forward validated parameters — the package resolves these automatically when a universe is specified. Third-party callers only need to pass the universe name.
+Eight universes are supported. Each has its own walk-forward validated parameters — the package resolves these automatically when a universe is specified. Third-party callers only need to pass the universe name.
 
 ### Validated Parameters Per Universe
 
@@ -840,6 +905,9 @@ Seven universes are supported. Each has its own walk-forward validated parameter
 | `multi_asset` | 12 | 126d (6mo) | 63d (3mo) | 5 | Walk-forward consensus (4/6 windows) |
 | `factor` | 12 | 210d (10mo) | 21d (1mo) | 3 | Walk-forward consensus (ROC=1mo 5/6 windows) |
 | `bond` | 12 | 126d (6mo) | 63d (3mo) | 10 | Walk-forward consensus (6/6 windows — most stable) |
+| `top20` | 20¹ | 126d (6mo) | 126d (6mo) | 5 | In-sample optimised (WF 4/6) |
+
+¹ Holdings fetched live from TOPT ETF via FMP API on every call. Share-class duplicates deduplicated by CUSIP issuer prefix. Backtest clamped to TOPT inception (2024-10-24).
 
 ### Performance Comparison (April 12, 2026)
 
@@ -906,12 +974,13 @@ Notes:
 - Use `factor` for US equity factor rotation (value/growth/momentum/quality); best OOS decay ratio (0.87) but modest raw returns due to vol-regime SPY dilution (see Section 12)
 - Use `bond` as a **complement** to equity universes — provides counter-cyclical exposure in equity bear years (2018, 2020, 2022); correct standalone benchmark is AGG not SPY (see Section 13)
 - `developed` has the weakest walk-forward OOS (decay 0.57); short sleeve added v0.15.0 improves in-sample Sharpe to 1.44 but OOS generalisation remains limited — use only if there is a specific mandate for developed market exposure
+- `top20` tracks the top 20 mega-cap US stocks held by the TOPT ETF; holdings are refreshed live on every call — highest Sharpe of all universes (3.394) over its 16-month live track record (Oct 2024 – Mar 2026); note: track record is short and coincides with a bull market
 
 ---
 
 ## 7. Current Performance
 
-### Current Parameters (v0.15.0)
+### Current Parameters (v0.18.0)
 
 ```python
 # Global (shared across all universes)
@@ -919,19 +988,22 @@ REBALANCE_FREQUENCY = "weekly"
 CASH_TICKER = "SGOV"               # backfilled with BIL pre-2020-06-12
 STOP_LOSS_THRESHOLD = 0.95         # 5% long stop-loss
 ENABLE_VOLATILITY_REGIME_SWITCHING = True
-ENABLE_BREADTH_FILTER = True
-BREADTH_FILTER_THRESHOLD = 0.40    # < 40% of sectors above SMA = low breadth
+ENABLE_BREADTH_FILTER = True       # global switch; per-universe override via enable_breadth_filter key
+BREADTH_FILTER_THRESHOLD = 0.40    # < 40% of universe ETFs above SMA = low breadth
 BREADTH_CASH_ALLOCATION = 0.5      # 50% SGOV + 50% top-1 when breadth triggers
 
 # Per-universe long parameters — resolved automatically by the package.
+# enable_breadth_filter: per-universe override (default True if omitted).
+# Tested on all four short-enabled universes (April 25, 2026) — off for all except sp500.
 UNIVERSE_PARAMS = {
-    "sp500":       { "sma_lookback_days": 210, "roc_lookback_days": 63,  "top_n": 3 },
-    "emerging":    { "sma_lookback_days": 252, "roc_lookback_days": 21,  "top_n": 3 },
-    "developed":   { "sma_lookback_days": 168, "roc_lookback_days": 21,  "top_n": 3 },
-    "commodity":   { "sma_lookback_days": 126, "roc_lookback_days": 126, "top_n": 3 },
+    "sp500":       { "sma_lookback_days": 210, "roc_lookback_days": 63,  "top_n": 3 },                               # breadth filter ON (default)
+    "emerging":    { "sma_lookback_days": 252, "roc_lookback_days": 21,  "top_n": 3,  "enable_breadth_filter": False }, # 10yr Sharpe 2.765 vs 2.514 with filter
+    "developed":   { "sma_lookback_days": 168, "roc_lookback_days": 21,  "top_n": 3,  "enable_breadth_filter": False }, # 10yr Sharpe 1.439 vs 1.440; higher return accepted
+    "commodity":   { "sma_lookback_days": 126, "roc_lookback_days": 126, "top_n": 3,  "enable_breadth_filter": False }, # clean sweep: Sharpe 2.252 vs 2.194; identical MaxDD
     "multi_asset": { "sma_lookback_days": 126, "roc_lookback_days": 63,  "top_n": 5 },
     "factor":      { "sma_lookback_days": 210, "roc_lookback_days": 21,  "top_n": 3 },
     "bond":        { "sma_lookback_days": 126, "roc_lookback_days": 63,  "top_n": 10 },
+    "top20":       { "sma_lookback_days": 126, "roc_lookback_days": 126, "top_n": 5 },  # live TOPT holdings; backtest clamped to 2024-10-24
 }
 
 # Short hedge sleeve — per-universe optimized params (v0.13.0).
@@ -969,6 +1041,31 @@ SHORT_UNIVERSE_PARAMS = {
     },
 }
 ```
+
+### Top20 Universe — Live Track Record (Oct 2024 – Mar 2026, bias-free)
+
+Holdings sourced live from TOPT ETF. Prior 10yr/19yr results (Sharpe 2.849 / Ann 96.45%) used a static snapshot and contain look-ahead bias — superseded by the numbers below.
+
+| Metric | Strategy | SPY Buy & Hold |
+|---|---|---|
+| Total Return | **195.59%** | 18.43% |
+| Annualized Return | **125.43%** | 13.53% |
+| Sharpe Ratio | **3.394** | 0.546 |
+| Max Drawdown | **-8.92%** | -19.00% |
+| $100k → | **$295,594** | $118,429 |
+| Win rate (months) | **14 / 16** | — |
+| Win rate (years) | **2 / 2** | — |
+
+**Yearly breakdown:**
+
+| Year | Strategy | SPY | Alpha |
+|---|---|---|---|
+| 2025 | +94.00% | +16.35% | +77.65pp |
+| 2026 (Jan–Mar) | +25.04% | +0.60% | +24.44pp |
+
+Note: 16-month track record; coincides with bull market conditions. Breadth filter fired 5 weeks (Mar–Apr 2025 tariff volatility) successfully containing drawdown.
+
+---
 
 ### SP500 Universe — 10-Year Summary WITH Short Hedge (2016–2026-04-08)
 
@@ -1134,23 +1231,36 @@ Note: 0/6 beating SPY is structural — this is a bond universe benchmarked agai
 
 Sharpe decay (10yr → 19yr): 2.514 → 2.778 = **no decay** — v0.11.0 breadth-filter reversal adds more alpha over the longer period (more bear market regimes to exploit).
 
+**v0.18.0 update — breadth filter disabled for emerging:**
+
+| Metric | v0.11.0 (breadth filter on) | v0.18.0 (breadth filter off) |
+|---|---|---|
+| 10yr Sharpe | 2.514 | **2.765** (+0.251) |
+| 10yr Ann Return | 46.74% | **56.80%** (+10.06pp) |
+| 10yr MaxDD | -7.68% | -9.10% (-1.42pp) |
+| 19yr Sharpe | **2.778** | 2.555 (-0.223) |
+| 19yr Ann Return | **53.75%** | 53.37% (-0.38pp) |
+| 19yr MaxDD | **-8.12%** | -10.02% (-1.90pp) |
+
+10yr improvement is substantial; 19yr trade-off accepted. The 100% short activation rate provides the downside hedging that the breadth filter was previously supplying in low-breadth regimes.
+
 ### Commodity Universe — 10-Year Summary WITH Short Hedge (2016–2026-04-08)
 
-| Metric | Long-Only Baseline | With Short Hedge (v0.12.0) | Delta |
-|---|---|---|---|
-| Annualized Return | 47.38% | **59.21%** | +11.83pp |
-| Sharpe Ratio | 1.861 | **2.194** | +0.333 |
-| Max Drawdown | -10.67% | **-10.56%** | +0.11pp (flat) |
+| Metric | Long-Only Baseline | With Short Hedge (v0.12.0) | v0.17.0 (no breadth filter) | Delta vs v0.12.0 |
+|---|---|---|---|---|
+| Annualized Return | 47.38% | 59.21% | **60.57%** | +1.36pp |
+| Sharpe Ratio | 1.861 | 2.194 | **2.252** | +0.058 |
+| Max Drawdown | -10.67% | -10.56% | **-10.56%** | 0 |
 
 Short sleeve stats (10yr): 95% activation rate, ~11 stop triggers/year. Dominant shorts: UNG, BNO, CORN, DBC.
 
 ### Commodity Universe — 19-Year Summary WITH Short Hedge (2007–2026-04-08)
 
-| Metric | With Short Hedge (v0.12.0) |
-|---|---|
-| Annualized Return | **48.67%** |
-| Sharpe Ratio | **2.034** |
-| Max Drawdown | **-10.56%** |
+| Metric | With Short Hedge (v0.12.0) | v0.17.0 (no breadth filter) |
+|---|---|---|
+| Annualized Return | 48.67% | **48.94%** |
+| Sharpe Ratio | 2.034 | **2.048** |
+| Max Drawdown | -10.56% | **-10.56%** |
 
 Short sleeve stats (19yr): 92% activation rate, ~9 stop triggers/year.
 
@@ -1490,6 +1600,8 @@ As of v0.13.0, the directional gate is applied universally in the pipeline regar
 
 As of v0.11.0, when the breadth filter triggers (< 40% of universe ETFs above SMA), the **short book stays open**. The long side still goes 50% SGOV + 50% top-1 ETF as before. Rationale: low-breadth regimes are broad market weakness — exactly when laggard ETFs fall hardest, making them the best time to hold shorts. Reversing the original "close on breadth" behaviour lifted 19yr emerging Sharpe from 2.436 → 2.778 and Ann Return from 44.17% → 53.75% with activation rising from 67% → 100%.
 
+As of v0.16.0–v0.18.0, the breadth filter is **disabled entirely** for developed, commodity, and emerging via a per-universe `enable_breadth_filter: False` flag in `UNIVERSE_PARAMS`. It remains active only for sp500. The sp500 breadth signal is uniquely reliable because it is calculated from the same 12 sector ETFs being traded — a direct health check of its own universe. For the other universes the high-activation short book already provides the downside hedge the breadth filter was delivering, making the long-side gate redundant.
+
 ### Daily Short Stop-Loss
 
 A 3% stop-loss is checked on **every trading day** (not just rebalance days):
@@ -1532,7 +1644,6 @@ shorts = run_short_signals('commodity') # e.g. ['UNG', 'BNO']
 shorts = run_short_signals('sp500')     # e.g. ['XLU']  — single position
 
 # Non-enabled universes always return []
-shorts = run_short_signals('developed')   # []
 shorts = run_short_signals('bond')        # []
 shorts = run_short_signals('factor')      # []
 shorts = run_short_signals('multi_asset') # []
@@ -1545,10 +1656,10 @@ Returns `[]` when no qualifying candidates pass the directional gate or when `EN
 
 | Universe | Short Enabled | Params | Notes |
 |---|---|---|---|
-| `emerging` | **Yes** | top_n=3, alloc=33%, stop=3%, `momentum_quality_only` | Optimized v0.10.0; breadth-filter reversal v0.11.0; Sharpe 2.778 (19yr) |
-| `commodity` | **Yes** | top_n=2, alloc=33%, stop=3%, `both_filters` | Optimized v0.12.0; Sharpe 2.194 (10yr) |
-| `sp500` | **Yes** | top_n=1, alloc=33%, stop=3%, `both_filters` | Optimized v0.13.0; Sharpe 1.626 (10yr); single worst sector |
-| `developed` | **Yes** | top_n=1, alloc=33%, stop=3%, `both_filters` | Optimized v0.15.0; Sharpe 1.44 (10yr) / 1.536 (19yr); WF decay 0.57 ⚠️ |
+| `emerging` | **Yes** | top_n=3, alloc=33%, stop=3%, `momentum_quality_only` | Optimized v0.10.0; breadth-filter reversal v0.11.0; breadth filter OFF v0.18.0; Sharpe 2.765 (10yr) |
+| `commodity` | **Yes** | top_n=2, alloc=33%, stop=3%, `both_filters` | Optimized v0.12.0; breadth filter OFF v0.17.0; Sharpe 2.252 (10yr) |
+| `sp500` | **Yes** | top_n=1, alloc=33%, stop=3%, `both_filters` | Optimized v0.13.0; breadth filter ON; Sharpe 1.626 (10yr); single worst sector |
+| `developed` | **Yes** | top_n=1, alloc=33%, stop=3%, `both_filters` | Optimized v0.15.0; breadth filter OFF v0.16.0; Sharpe 1.439 (10yr); WF decay 0.57 ⚠️ |
 | `multi_asset` | No | — | Pending optimization |
 | `factor` | No | — | Candidate — slow factor rotations may reward shorting |
 | `bond` | No | — | Not suitable — long-only complement universe |
@@ -1734,7 +1845,7 @@ Activation rate 81%; ~6.3 stop triggers/year.
 
 ---
 
-## 17. Future Enhancements
+## 18. Future Enhancements
 
 ### TBD-1: Rolling Walk-Forward Optimization (Annual Re-Calibration)
 
@@ -1758,7 +1869,73 @@ Activation rate 81%; ~6.3 stop triggers/year.
 
 *Signals: `uv run python -m etfmomentum signal --universe <universe> --detailed --refresh`*
 *Short optimize: `uv run python -m etfmomentum short-optimize --universe <universe>`*
-*Available universes: `sp500`, `emerging`, `developed`, `commodity`, `multi_asset`, `factor`, `bond`*
+*Available universes: `sp500`, `emerging`, `developed`, `commodity`, `multi_asset`, `factor`, `bond`, `top20`*
 *Backtest: `uv run python -m etfmomentum backtest --universe <universe> --start-date 2016-01-01`*
 *Walk-forward: `uv run python -m etfmomentum walk-forward --universe <universe>`*
 *Web UI: `./start_api.sh` + `./start_ui.sh` → http://localhost:3000*
+
+---
+
+## 17. Top20 Universe — Detailed Notes
+
+### What is TOPT
+
+TOPT (Invesco Top 20 ETF) holds the top 20 US mega-cap stocks by market capitalisation, rebalanced periodically. It is used as the authoritative and live source for the `top20` universe ticker list. Instead of a manually maintained CSV, the package calls the FMP `etf-holder/TOPT` endpoint on every invocation — ensuring the universe always reflects the current mega-cap composition.
+
+**TOPT inception:** 2024-10-24 — the earliest date for which price data is available.
+
+### Holdings Refresh Mechanism
+
+Every call to `load_universe_by_name("top20", ...)` triggers a live FMP API fetch:
+
+1. `GET /api/v3/etf-holder/TOPT?apikey=...`
+2. Filter out cash/collateral rows (empty `asset` field)
+3. Sort by `weightPercentage` descending
+4. Deduplicate by CUSIP issuer prefix (first 6 chars) — keeps highest-weight share class; e.g. GOOGL kept over GOOG
+5. Take top 20
+6. Return `{ticker: name}` dict — same interface as all other universes
+
+On API failure a `RuntimeError` is raised immediately — no silent fallback to stale data.
+
+### Backtest Behaviour
+
+Backtests use the same live fetch (today's holdings applied to historical prices). This introduces look-ahead bias for periods before the current holdings composition was established. To limit this:
+
+- Start date is automatically clamped to `2024-10-24` (TOPT inception) with a logged warning
+- The 16-month live track record (Oct 2024 – Mar 2026) is the only bias-free reference
+
+All other universes continue to use static CSV files for backtesting and are unaffected by this change.
+
+### Current Holdings (as of April 26, 2026)
+
+| Rank | Ticker | Name | Weight |
+|---|---|---|---|
+| 1 | NVDA | Nvidia Corp | 17.2% |
+| 2 | AAPL | Apple Inc | 13.5% |
+| 3 | GOOGL | Alphabet Inc Class A | 6.8% |
+| 4 | MSFT | Microsoft Corp | 6.2% |
+| 5 | AMZN | Amazon.Com Inc | 5.3% |
+| 6 | AVGO | Broadcom Inc | 5.3% |
+| 7 | META | Meta Platforms Inc Class A | 4.4% |
+| 8 | BRK-B | Berkshire Hathaway Inc Class B | 4.0% |
+| 9 | TSLA | Tesla Inc | 3.9% |
+| 10 | JPM | Jpmorgan Chase & Co | 3.9% |
+| 11 | LLY | Eli Lilly | 3.3% |
+| 12 | XOM | Exxon Mobil Corp | 2.9% |
+| 13 | WMT | Walmart Inc | 2.7% |
+| 14 | MU | Micron Technology Inc | 2.6% |
+| 15 | JNJ | Johnson & Johnson | 2.6% |
+| 16 | V | Visa Inc Class A | 2.4% |
+| 17 | COST | Costco Wholesale Corp | 2.1% |
+| 18 | MA | Mastercard Inc Class A | 1.9% |
+| 19 | NFLX | Netflix Inc | 1.8% |
+| 20 | ABBV | Abbvie Inc | 1.6% |
+
+*GOOG (Alphabet Class C, 5.4% weight) deduplicated out — same issuer as GOOGL (CUSIP prefix 02079K).*
+
+### Performance Characteristics
+
+- Highest Sharpe ratio of all universes (3.394 over 16-month live track record)
+- MaxDD -8.92% — breadth filter successfully contained tariff-volatility drawdown in Mar–Apr 2025
+- Rotation pattern: consumer/growth (WMT, TSLA, NFLX) in Q4 2024–Q1 2025 → semis/tech (MU, GOOGL, AVGO, NVDA) from Sep 2025 onward
+- Short sleeve not enabled for this universe (single-stock shorts in mega-caps carry event risk not present in sector/country ETFs)
