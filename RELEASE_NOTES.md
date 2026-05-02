@@ -2,6 +2,26 @@
 
 ---
 
+## v0.19.1 — Packaging fixes: lazy API key, version sync (May 2, 2026)
+
+### Overview
+
+Patch release with no strategy changes. Addresses packaging issues reported by third-party consumers.
+
+### Changes
+
+- **Lazy API key** — `config.py` no longer raises at import time if `FMP_API_KEY` is missing. The key is now validated at call time inside `run_signals()` and `run_short_signals()`. Both functions accept an explicit `api_key=` parameter as the preferred pattern.
+- **Version sync** — `pyproject.toml` corrected to `0.19.1` (was stuck at `0.9.0`). `pip show etfmomentum` and `importlib.metadata.version('etfmomentum')` now return the correct version.
+- **Documentation** — added `CLAUDE.md` (session guide for AI assistants), `DECISIONS.md` (10 architecture decision records), rewrote `LIBRARY_USAGE.md` to current API, added `RELEASE_NOTES` entries for v0.15.0–v0.19.0.
+
+### Installation
+
+```bash
+pip install git+https://github.com/jaig1/etfmomentum.git@v0.19.1
+```
+
+---
+
 ## v0.19.0 — Top20: Live TOPT Holdings via FMP API (April 26, 2026)
 
 ### Overview
