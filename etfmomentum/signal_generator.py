@@ -324,6 +324,7 @@ def run_signals(
     universe: str,
     date: Optional[pd.Timestamp] = None,
     top_n: Optional[int] = None,
+    api_key: Optional[str] = None,
 ) -> List[str]:
     """
     Public interface for live signal generation.
@@ -335,6 +336,8 @@ def run_signals(
         universe: ETF universe name ('sp500', 'developed', 'emerging', 'commodity')
         date: Date to evaluate signals (None = today)
         top_n: Number of top ETFs to select (None = use config.TOP_N_HOLDINGS)
+        api_key: FMP API key. If not provided, falls back to the FMP_API_KEY
+            environment variable. Raises ValueError at call time if neither is set.
 
     Returns:
         List of selected ETF tickers, with SGOV replacing any underperformers
@@ -342,6 +345,14 @@ def run_signals(
     from . import config
     from .etf_loader import load_universe_by_name
     from .data_fetcher import fetch_all_data
+
+    resolved_key = api_key or config.FMP_API_KEY
+    if not resolved_key:
+        raise ValueError(
+            "FMP_API_KEY is required. Pass it as run_signals(..., api_key='your_key') "
+            "or set the FMP_API_KEY environment variable. "
+            "Get a free key at https://financialmodelingprep.com/developer/docs/"
+        )
 
     params = config.UNIVERSE_PARAMS.get(universe, config.UNIVERSE_PARAMS["sp500"])
     if top_n is None:
@@ -360,7 +371,7 @@ def run_signals(
         ticker_list=all_tickers,
         start_date=start_date_str,
         end_date=end_date_str,
-        api_key=config.FMP_API_KEY,
+        api_key=resolved_key,
         api_delay=config.FMP_API_DELAY,
     )
 
@@ -406,7 +417,7 @@ def _run_signals_with_data(
     return _compute_tickers(price_data_slice, etf_tickers, date, top_n, universe)
 
 
-def run_short_signals(universe: str) -> List[str]:
+def run_short_signals(universe: str, api_key: Optional[str] = None) -> List[str]:
     """
     Public interface for live short signal generation.
 
@@ -419,6 +430,8 @@ def run_short_signals(universe: str) -> List[str]:
 
     Args:
         universe: ETF universe name ('emerging', 'sp500', etc.)
+        api_key: FMP API key. If not provided, falls back to the FMP_API_KEY
+            environment variable. Raises ValueError at call time if neither is set.
 
     Returns:
         List of tickers to short. Empty list if universe not enabled,
@@ -434,6 +447,14 @@ def run_short_signals(universe: str) -> List[str]:
     if universe not in config.SHORT_ENABLED_UNIVERSES:
         return []
 
+    resolved_key = api_key or config.FMP_API_KEY
+    if not resolved_key:
+        raise ValueError(
+            "FMP_API_KEY is required. Pass it as run_short_signals(..., api_key='your_key') "
+            "or set the FMP_API_KEY environment variable. "
+            "Get a free key at https://financialmodelingprep.com/developer/docs/"
+        )
+
     long_params  = config.UNIVERSE_PARAMS.get(universe, config.UNIVERSE_PARAMS['sp500'])
     short_params = config.SHORT_UNIVERSE_PARAMS[universe]  # guaranteed present — checked above
 
@@ -446,7 +467,7 @@ def run_short_signals(universe: str) -> List[str]:
         ticker_list=all_tickers,
         start_date=start_date_str,
         end_date=end_date_str,
-        api_key=config.FMP_API_KEY,
+        api_key=resolved_key,
         api_delay=config.FMP_API_DELAY,
     )
 

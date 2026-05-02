@@ -2,6 +2,181 @@
 
 ---
 
+## v0.19.0 — Top20: Live TOPT Holdings via FMP API (April 26, 2026)
+
+### Overview
+
+v0.19.0 replaces the static `etflist/top20_stock.csv` snapshot with a live FMP API call to `/api/v3/etf-holder/TOPT` on every signal and backtest invocation. This eliminates the look-ahead bias present in all prior top20 backtests.
+
+### Key Changes
+
+- `etf_loader.py`: `load_universe_by_name('top20')` now calls `FMP /api/v3/etf-holder/TOPT` instead of reading a CSV. CUSIP issuer prefix deduplication applied (e.g. GOOG dropped; GOOGL kept as the higher-weight share class).
+- Raises `RuntimeError` on API failure — no silent fallback to stale data.
+- Backtest clamped to TOPT inception **2024-10-24** with a warning if an earlier start date is requested.
+- `etflist/top20_stock.csv` removed from the package.
+- All callers (CLI, `POST /signals`, `run_signals('top20')`) transparently use live holdings.
+
+### ⚠️ Prior top20 Performance Numbers Superseded
+
+All previously published top20 10yr/19yr numbers (Sharpe 2.849 / 2.821, Ann 96.45% / 93.29%) were generated using static holdings snapshots and contain **look-ahead bias**. They must not be used as performance references. The only valid results are the bias-free 16-month track below.
+
+### Bias-Free Results (Oct 2024 – Mar 2026, 16 months)
+
+| Metric | Strategy | SPY |
+|---|---|---|
+| Total Return | 195.59% | 18.43% |
+| Annualized Return | 125.43% | — |
+| Sharpe Ratio | **3.394** | — |
+| Max Drawdown | -8.92% | — |
+| Win Rate | 14/16 months, 2/2 years | — |
+
+Note: 16-month track coincides with a bull market; not directly comparable to 10yr numbers of other universes.
+
+### Installation
+
+```bash
+pip install git+https://github.com/jaig1/etfmomentum.git@v0.19.0
+```
+
+---
+
+## v0.18.0 — Disable Breadth Filter for Emerging Universe (April 25, 2026)
+
+### Overview
+
+v0.18.0 disables the breadth filter for the `emerging` universe by setting `enable_breadth_filter: False` in `UNIVERSE_PARAMS['emerging']`. With the short sleeve running at 100% activation, the breadth filter was adding defensive friction without benefit.
+
+### Impact — Emerging Universe
+
+| Metric | With Breadth Filter | Without (v0.18.0) |
+|---|---|---|
+| 10yr Sharpe | 2.514 | **2.765** |
+| 19yr Sharpe | 2.778 | **2.587** |
+| 10yr Ann Return | — | 56.80% |
+| 10yr MaxDD | — | -9.10% |
+| Short activation | — | **100%** |
+
+The 10yr Sharpe improvement (+0.251) outweighs the small 19yr Sharpe regression (-0.191). Trade-off accepted.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `config.py` | `UNIVERSE_PARAMS['emerging']['enable_breadth_filter'] = False` |
+
+### Installation
+
+```bash
+pip install git+https://github.com/jaig1/etfmomentum.git@v0.18.0
+```
+
+---
+
+## v0.17.0 — Disable Breadth Filter for Commodity Universe (April 25, 2026)
+
+### Overview
+
+v0.17.0 disables the breadth filter for the `commodity` universe. With short activation at 95%, the filter was redundant — the short book already hedges the same risk the breadth filter was managing.
+
+### Impact — Commodity Universe
+
+| Metric | With Breadth Filter | Without (v0.17.0) |
+|---|---|---|
+| 10yr Sharpe | 2.194 | **2.252** |
+| 19yr Sharpe | 2.034 | **2.076** |
+| 10yr MaxDD | -10.56% | -10.56% (identical) |
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `config.py` | `UNIVERSE_PARAMS['commodity']['enable_breadth_filter'] = False` |
+
+### Installation
+
+```bash
+pip install git+https://github.com/jaig1/etfmomentum.git@v0.17.0
+```
+
+---
+
+## v0.16.0 — Developed Market Short Sleeve + Disable Breadth Filter (April 24, 2026)
+
+### Overview
+
+v0.16.0 adds a short sleeve for the `developed` universe and disables its breadth filter. Validated via 72-combo grid search; walk-forward decay 0.57 (weakest of all short sleeves — use with awareness).
+
+### Short Parameters — Developed Universe
+
+| Parameter | Value | Notes |
+|---|---|---|
+| `top_n` | 1 | Single weakest country ETF — large universe (26 ETFs) is highly correlated |
+| `allocation` | 0.33 | 33% gross short on top of 100% long (133% gross) |
+| `stop_loss` | 1.03 | 3% stop decisive: avg Sharpe 1.296 (3%) vs 1.153 (5%) |
+| `qualification` | `both_filters` | Must fail RS filter AND absolute trend filter |
+
+### Validated Performance — Developed Universe
+
+| Period | Long-Only | With Short | Delta |
+|---|---|---|---|
+| 10yr Sharpe | 1.440 | **1.439** | flat |
+| 10yr Ann Return | — | 22.57% | — |
+| 10yr MaxDD | -6.72% | -8.47% | slightly wider |
+| 19yr Sharpe | — | **1.517** | — |
+| 19yr Ann Return | — | 26.45% | — |
+| 19yr Win Rate | — | 15/19 years | — |
+
+⚠️ Walk-forward OOS/IS decay ratio 0.57 — weakest of all short sleeves. Consider this experimental relative to emerging (decay 0.87+) and commodity.
+
+### Breadth Filter Disabled
+
+With the short book running at 81% activation, disabling the breadth filter gives higher returns with near-identical Sharpe (10yr 1.439 vs 1.440 with filter on); slightly wider MaxDD accepted.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `config.py` | `'developed'` added to `SHORT_ENABLED_UNIVERSES`; `SHORT_UNIVERSE_PARAMS['developed']` added; `UNIVERSE_PARAMS['developed']['enable_breadth_filter'] = False` |
+
+### Installation
+
+```bash
+pip install git+https://github.com/jaig1/etfmomentum.git@v0.16.0
+```
+
+---
+
+## v0.15.0 — Short Hedge Sleeve: Developed Market Universe (April 24, 2026)
+
+### Overview
+
+v0.15.0 extends the short hedge sleeve to the `developed` universe (26 iShares country ETFs). This is the fourth short-enabled universe after emerging (v0.10.0), commodity (v0.12.0), and sp500 (v0.13.0).
+
+*Note: breadth filter subsequently disabled in v0.16.0. The numbers below reflect the v0.15.0 baseline with breadth filter still enabled.*
+
+### Optimization Summary (72-combo grid search)
+
+| Parameter | Sensitivity Finding |
+|---|---|
+| `top_n` | top_n=1/2/3 near-identical avg Sharpe — 1 chosen as most conservative |
+| `stop_loss` | **3% decisive** — avg Sharpe 1.296 (3%) vs 1.153 (5%) |
+| `allocation` | Insensitive across 15/25/33%; 33% chosen for consistency |
+| `qualification` | Tied; `both_filters` chosen as stricter gate |
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `config.py` | `'developed'` added to `SHORT_ENABLED_UNIVERSES`; `SHORT_UNIVERSE_PARAMS['developed']` added |
+
+### Installation
+
+```bash
+pip install git+https://github.com/jaig1/etfmomentum.git@v0.15.0
+```
+
+---
+
 ## v0.14.0 — Top 20 Stock Universe (April 23, 2026)
 
 ### Overview
